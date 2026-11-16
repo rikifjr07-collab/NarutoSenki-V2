@@ -845,7 +845,8 @@ void GameLayer::onLeft()
 	removeSprites("UI.plist");
 	removeSprites("Map.plist");
 
-	SimpleAudioEngine::sharedEngine()->end();
+	SimpleAudioEngine::sharedEngine()->stopAllEffects();
+	SimpleAudioEngine::sharedEngine()->stopBackgroundMusic(true);
 
 	lua_call_func(UiFlowKeys::kOnGameOver);
 }
