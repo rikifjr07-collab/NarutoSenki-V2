@@ -142,12 +142,12 @@ void GameOver::listResult()
 			resultScore = ((killDead - ((_totalSecond / 60.0f - 10) * 4)) / 40) * 100;
 	}
 
-	if (_totalSecond < 1 * 60 + 5 && _isWin)
-	{
-		SimpleAudioEngine::sharedEngine()->stopBackgroundMusic(true);
-		Director::sharedDirector()->end();
-		return;
-	}
+	//if (_totalSecond < 1 * 60 + 5 && _isWin)
+	//{
+	//	SimpleAudioEngine::sharedEngine()->stopBackgroundMusic(true);
+	//	Director::sharedDirector()->end();
+	//	return;
+	//}
 
 	int i = 0;
 	uint32_t konohaKill = 0;
@@ -256,12 +256,12 @@ void GameOver::listResult()
 	if (Cheats < kMaxCheats)
 	{
 		// Verify that the game total kills is valid
-		if ((akatsukiKill + konohaKill) != getGameLayer()->getTotalKills())
-		{
-			SimpleAudioEngine::sharedEngine()->stopBackgroundMusic(true);
-			Director::sharedDirector()->end();
-			return;
-		}
+	//	if ((akatsukiKill + konohaKill) != getGameLayer()->getTotalKills())
+	//	{
+	//		SimpleAudioEngine::sharedEngine()->stopBackgroundMusic(true);
+	//		Director::sharedDirector()->end();
+	//		return;
+	//	}
 
 		uint32_t realKillNum = currPlayer->getKillNum();
 
