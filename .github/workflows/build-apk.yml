@@ -1,0 +1,48 @@
+name: Build Naruto Senki APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "master" ]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build & Sign APK
+        working-directory: projects/NarutoSenki/proj.android-studio
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease
+          
+          # Membuat keystore sementara & menandatangani APK agar bisa diinstal di HP
+          keytool -genkey -v -keystore release.keystore -alias naruto -keyalg RSA -keysize 2048 -validity 10000 -storepass 123456 -keypass 123456 -dname "CN=NarutoSenki, OU=Dev, O=Game, L=ID, ST=ID, C=ID"
+          
+          BUILD_TOOLS=$(ls -d $ANDROID_HOME/build-tools/* | tail -n 1)
+          APK_UNSIGNED=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          
+          $BUILD_TOOLS/zipalign -v -p 4 "$APK_UNSIGNED" aligned.apk
+          $BUILD_TOOLS/apksigner sign --ks release.keystore --ks-pass pass:123456 --key-pass pass:123456 --out NarutoSenki-V2-Release.apk aligned.apk
+
+      - name: Publish to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Naruto Senki V2 Build #${{ github.run_number }}
+          files: projects/NarutoSenki/proj.android-studio/NarutoSenki-V2-Release.apk
