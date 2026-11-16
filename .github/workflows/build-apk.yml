@@ -31,9 +31,23 @@ jobs:
           distribution: 'temurin'
           java-version: '8'
 
-      - name: Build & Sign APK
+      - name: Fix Header Path fmt & Build APK
         working-directory: projects/NarutoSenki/proj.android-studio
         run: |
+          # Cari lokasi folder induk dari fmt/core.h di dalam repo
+          FMT_CORE=$(find "$GITHUB_WORKSPACE" -path "*/fmt/core.h" | head -n 1)
+          if [ -n "$FMT_CORE" ]; then
+            FMT_INC=$(dirname $(dirname "$FMT_CORE"))
+            echo "Ditemukan folder include fmt di: $FMT_INC"
+            # Tambahkan path fmt ke Android.mk milik Lua dan proyek utama
+            find "$GITHUB_WORKSPACE" -name "Android.mk" -exec sed -i "s|LOCAL_C_INCLUDES :=|LOCAL_C_INCLUDES := $FMT_INC|g" {} +
+          else
+            echo "PERINGATAN: fmt/core.h tidak ditemukan di repo, mengunduh fmt..."
+            git clone --depth 1 --branch 9.1.0 https://github.com "$GITHUB_WORKSPACE/external/fmt"
+            FMT_INC="$GITHUB_WORKSPACE/external/fmt/include"
+            find "$GITHUB_WORKSPACE" -name "Android.mk" -exec sed -i "s|LOCAL_C_INCLUDES :=|LOCAL_C_INCLUDES := $FMT_INC|g" {} +
+          fi
+
           echo "ndk.dir=$ANDROID_NDK_HOME" > local.properties
           chmod +x gradlew
           ./gradlew assembleRelease --stacktrace
