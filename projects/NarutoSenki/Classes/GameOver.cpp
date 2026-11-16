@@ -11,9 +11,7 @@ GameOver::GameOver()
 
 GameOver::~GameOver()
 {
-	AnimationCache::purgeSharedAnimationCache();
-	SpriteFrameCache::sharedSpriteFrameCache()->removeUnusedSpriteFrames();
-	TextureCache::sharedTextureCache()->removeUnusedTextures();
+
 }
 
 bool GameOver::init(RenderTexture *snapshoot)
