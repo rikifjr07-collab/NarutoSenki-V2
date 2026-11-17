@@ -64,6 +64,7 @@ void LanManager::disconnect()
 	_isHost = false;
 	_isClient = false;
 	_gameStarted = false;
+    _winnerGroup = -1;
 
 	if (_tcpSocket >= 0) { close(_tcpSocket); _tcpSocket = -1; }
 	if (_udpSocket >= 0) { close(_udpSocket); _udpSocket = -1; }
@@ -261,6 +262,13 @@ void LanManager::hostAcceptLoop()
 					}
 					broadcastLobbyState();
 				}
+				else if (msg.find("SURRENDER:") == 0)
+{
+	int loserGroup = atoi(msg.substr(10).c_str());
+	int winnerGroup = (loserGroup == 0) ? 1 : 0;
+	broadcastGameOver(winnerGroup);
+}
+
 			}
 		}).detach();
 	}
@@ -296,6 +304,11 @@ void LanManager::clientReceiveLoop()
 			{
 				_gameStarted = true;
 			}
+			else if (line.find("OVER:") == 0)
+{
+	_winnerGroup = atoi(line.substr(5).c_str());
+}
+
 		}
 	}
 }
@@ -509,4 +522,31 @@ vector<NetHeroSync> LanManager::getLatestWorldState()
 {
 	std::lock_guard<std::mutex> lock(_dataMutex);
 	return _latestWorldState;
+}
+void LanManager::notifySurrender(int myGroup)
+{
+	int enemyGroup = (myGroup == 0) ? 1 : 0;
+	if (_isHost)
+	{
+		broadcastGameOver(enemyGroup);
+	}
+	else if (_isClient && _tcpSocket >= 0)
+	{
+		string msg = format("SURRENDER:{}\n", myGroup);
+		send(_tcpSocket, msg.c_str(), msg.size(), 0);
+	}
+}
+
+void LanManager::broadcastGameOver(int winnerGroup)
+{
+	_winnerGroup = winnerGroup;
+	if (!_isHost) return;
+
+	string msg = format("OVER:{}\n", winnerGroup);
+	std::lock_guard<std::mutex> lock(_dataMutex);
+	for (int fd : _clientSockets)
+	{
+		if (fd >= 0)
+			send(fd, msg.c_str(), msg.size(), 0);
+	}
 }
