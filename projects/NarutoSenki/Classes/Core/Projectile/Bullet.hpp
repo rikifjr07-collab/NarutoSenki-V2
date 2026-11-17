@@ -66,7 +66,7 @@ public:
 
 	void setMove(int length, float delay, bool isReverse)
 	{
-		float speedScale = 0.7f;
+		float speedScale = 0.8f;
 		delay *= speedScale;
 
 		Vec2 direction = Vec2(_isFlipped ? getPosition().x - length : getPosition().x + length, getPositionY());
@@ -90,7 +90,7 @@ public:
 
 	void setEaseIn(int length, float delay)
 	{
-		float speedScale = 0.7f;
+		float speedScale = 0.8f;
 		Vec2 direction = Vec2(_isFlipped ? getPosition().x - length : getPosition().x + length, getPositionY());
 		auto mv = MoveTo::create(1.0f * speedScale, direction);
 		auto eo = EaseIn::create(mv, delay);
