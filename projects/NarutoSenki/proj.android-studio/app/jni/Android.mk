@@ -27,6 +27,7 @@ LOCAL_SRC_FILES := narutosenki/main.cpp \
 		../../../Classes/PauseLayer.cpp \
 		../../../Classes/SelectLayer.cpp \
 		../../../Classes/StartMenu.cpp \
+		../../../Classes/Network/LanManager.cpp \
 		../../../Classes/MyUtils/CCScrewLayer.cpp \
 		../../../Classes/MyUtils/CCShake.cpp \
 		../../../Classes/MyUtils/CCStrokeLabel.cpp \
