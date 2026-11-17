@@ -1900,9 +1900,9 @@ void CharacterBase::setRestore2(float dt)
 		if (isZone)
 			setHPValue(getHP() > 1000 ? getHP() - 1000 : 100);
 
-		if (_state == State::IDLE && getHpPercent() < 1)
+		if ((_state == State::IDLE || _state == State::WALK) && getHpPercent() < 1)
 		{
-			increaseHpAndUpdateUI(300);
+			increaseHpAndUpdateUI(100);
 		}
 	}
 }
