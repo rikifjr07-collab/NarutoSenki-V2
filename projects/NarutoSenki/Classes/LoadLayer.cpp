@@ -282,17 +282,21 @@ void LoadLayer::unloadCharIMG(CharacterBase *c)
 
 void LoadLayer::unloadAllCharsIMG(const vector<Hero *> &players)
 {
-	vector<string> unloadVector(players.size());
-	for (auto player : players)
+	auto herosDataVector = getGameModeHandler()->getHerosArray();
+	vector<string> unloadVector;
+	for (const auto &data : herosDataVector)
 	{
-		auto name = player->getName();
+		auto name = data.name;
 		if (std::find(unloadVector.begin(), unloadVector.end(), name) == unloadVector.end())
 		{
-			unloadCharIMG(player);
+			auto path = format("Unit/Ninja/{}/{}.plist", name, name);
+			removeSprites(path);
+			KTools::prepareFileOGG(name, true);
 			unloadVector.push_back(name);
 		}
 	}
 }
+
 
 void LoadLayer::setLoadingAnimation(const char *player, int index)
 {
