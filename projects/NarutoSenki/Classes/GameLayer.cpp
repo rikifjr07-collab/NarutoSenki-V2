@@ -10,6 +10,7 @@
 #include "Systems/BattleRuntimeSystem.hpp"
 #include "Systems/SpawnSystem.hpp"
 #include "Systems/SessionState.hpp"
+#include "Network/LanManager.h"
 
 GameLayer *_gLayer = nullptr;
 bool _isFullScreen = false;
