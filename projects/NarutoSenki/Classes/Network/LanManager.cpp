@@ -100,7 +100,8 @@ bool LanManager::startHost()
 	addr.sin_addr.s_addr = INADDR_ANY;
 	addr.sin_port = htons(TCP_PORT);
 
-	if (bind(_tcpSocket, (sockaddr *)&addr, sizeof(addr)) < 0)
+	if (::bind(_tcpSocket, (sockaddr *)&addr, sizeof(addr)) < 0)
+
 	{
 		close(_tcpSocket);
 		_tcpSocket = -1;
@@ -115,7 +116,8 @@ bool LanManager::startHost()
 	udpAddr.sin_family = AF_INET;
 	udpAddr.sin_addr.s_addr = INADDR_ANY;
 	udpAddr.sin_port = htons(UDP_PORT);
-	bind(_udpSocket, (sockaddr *)&udpAddr, sizeof(udpAddr));
+	::bind(_udpSocket, (sockaddr *)&udpAddr, sizeof(udpAddr));
+
 
 	_isHost = true;
 	_running = true;
@@ -163,7 +165,7 @@ bool LanManager::joinHost(const string &ipAddress)
 	udpAddr.sin_family = AF_INET;
 	udpAddr.sin_addr.s_addr = INADDR_ANY;
 	udpAddr.sin_port = htons(UDP_PORT + 1);
-	bind(_udpSocket, (sockaddr *)&udpAddr, sizeof(udpAddr));
+	::bind(_udpSocket, (sockaddr *)&udpAddr, sizeof(udpAddr));
 
 	_hostIp = ipAddress;
 	_isClient = true;
