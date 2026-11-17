@@ -111,7 +111,7 @@ void SelectLayer::updateNetworkLobby(float dt)
 
 void SelectLayer::onExitTransitionDidStart()
 {
-	Layer::onEnterTransitionDidStart();
+	Layer::onExitTransitionDidStart();
 	unschedule(schedule_selector(SelectLayer::updateNetworkLobby));
 	setKeypadEnabled(false);
 }
