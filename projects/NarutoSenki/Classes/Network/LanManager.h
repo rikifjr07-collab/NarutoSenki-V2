@@ -63,6 +63,9 @@ public:
 	void broadcastWorldState(const vector<NetHeroSync> &heroes);
 	vector<NetPlayerInput> popPendingInputs();
 	vector<NetHeroSync> getLatestWorldState();
+    void notifySurrender(int myGroup);
+    void broadcastGameOver(int winnerGroup);
+    int getNetworkWinnerGroup() const { return _winnerGroup; }
 
 private:
 	LanManager();
@@ -78,6 +81,7 @@ private:
 	std::atomic<bool> _isClient{false};
 	std::atomic<bool> _running{false};
 	std::atomic<bool> _gameStarted{false};
+    std::atomic<int> _winnerGroup{-1};
 
 	int _myPlayerId = 1;
 	int _tcpSocket = -1;
