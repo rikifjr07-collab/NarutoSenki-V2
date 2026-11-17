@@ -28,7 +28,7 @@ public:
 
 	static int readWinNumFromSQL(const char *heroName);
 	static int readCoinFromSQL();
-	static string readRecordTimeFromSQL(const char *heroName);
+	static const char *readRecordTimeFromSQL(const char *heroName);
 	static string encodeData(string data);
 };
 
