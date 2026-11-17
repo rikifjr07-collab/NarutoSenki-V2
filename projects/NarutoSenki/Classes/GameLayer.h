@@ -107,6 +107,7 @@ public:
 
 	void updateViewPoint(float dt);
 	void updateGameTime(float dt);
+    void updateNetworkSync(float dt);
 
 	Hero *addHero(const HeroData &data, int charId);
 	Hero *addHero(const string &name, Role role, Group group, Vec2 spawnPoint, int charNo);
