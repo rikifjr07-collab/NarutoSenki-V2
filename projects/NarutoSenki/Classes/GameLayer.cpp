@@ -33,12 +33,18 @@ void BattleRuntimeSystem::onGameStart(GameLayer *layer, bool skipInitFlogs, floa
 	}
 
 	layer->setKeyEventHandler();
-	for (auto hero : layer->_CharacterArray)
-	{
-		hero->setWalkSpeed(hero->_originSpeed);
-		if (hero->isCom())
-			hero->doAI();
-	}
+for (auto hero : layer->_CharacterArray)
+{
+	hero->setWalkSpeed(hero->_originSpeed);
+	if (hero->isCom() && !LanManager::getInstance()->isClient())
+		hero->doAI();
+}
+
+if (LanManager::getInstance()->isMultiplayer())
+{
+	layer->schedule(schedule_selector(GameLayer::updateNetworkSync), 0.04f);
+}
+
 }
 
 void BattleRuntimeSystem::updateGameTime(GameLayer *layer) const
@@ -526,6 +532,84 @@ void GameLayer::updateViewPoint(float dt)
 {
 	_battleRuntimeSystem->updateViewPoint(this);
 }
+void GameLayer::updateNetworkSync(float dt)
+{
+	auto lan = LanManager::getInstance();
+	if (!lan->isMultiplayer())
+		return;
+
+	if (lan->isHost())
+	{
+		auto inputs = lan->popPendingInputs();
+		for (const auto &inp : inputs)
+		{
+			for (int s = 0; s < 6; s++)
+			{
+				NetSlotData slot = lan->getSlot(s);
+				if (slot.ownerId == inp.playerId && s < (int)_CharacterArray.size())
+				{
+					Hero *targetHero = _CharacterArray[s];
+					if (targetHero && targetHero->getState() != State::DEAD)
+					{
+						if (inp.actionType == 99)
+						{
+							if (targetHero->getState() == State::WALK)
+								targetHero->idle();
+						}
+						else if (inp.actionType == -1)
+						{
+							targetHero->walk(Vec2(inp.dirX, inp.dirY));
+						}
+						else if (inp.actionType == (int)Item1)
+						{
+							targetHero->setItem(Item1);
+						}
+						else if (inp.actionType >= 0)
+						{
+							targetHero->attack((ABType)inp.actionType);
+						}
+					}
+					break;
+				}
+			}
+		}
+
+		vector<NetHeroSync> snapshot;
+		for (auto hero : _CharacterArray)
+		{
+			if (!hero) continue;
+			NetHeroSync item{};
+			item.charId = hero->getCharId();
+			item.x = hero->getPositionX();
+			item.y = hero->getPositionY();
+			item.isFlipped = hero->_isFlipped;
+			item.state = (int)hero->getState();
+			item.hp = hero->getHP();
+			item.maxHp = hero->getMaxHP();
+			snapshot.push_back(item);
+		}
+		lan->broadcastWorldState(snapshot);
+	}
+	else if (lan->isClient())
+	{
+		auto states = lan->getLatestWorldState();
+		for (const auto &st : states)
+		{
+			for (auto hero : _CharacterArray)
+			{
+				if (hero && hero->getCharId() == st.charId)
+				{
+					hero->setPosition(Vec2(st.x, st.y));
+					hero->_isFlipped = st.isFlipped;
+					hero->setFlipX(st.isFlipped);
+					hero->setZOrder(-st.y);
+					hero->setHPValue(st.hp, false);
+					break;
+				}
+			}
+		}
+	}
+}
 
 void GameLayer::setTowerState(int charId)
 {
@@ -670,6 +754,10 @@ void GameLayer::clearDoubleClick()
 
 void GameLayer::JoyStickRelease()
 {
+	if (LanManager::getInstance()->isClient())
+	{
+		LanManager::getInstance()->sendClientInput(0, 0, 99);
+	}
 	if (currentPlayer->getState() == State::WALK)
 	{
 		currentPlayer->idle();
@@ -678,9 +766,12 @@ void GameLayer::JoyStickRelease()
 
 void GameLayer::JoyStickUpdate(Vec2 direction)
 {
+	if (LanManager::getInstance()->isClient())
+	{
+		LanManager::getInstance()->sendClientInput(direction.x, direction.y, -1);
+	}
 	if (!ougisChar)
 	{
-		// CCLOG("x:%f,y:%f",direction.x,direction.y);
 		currentPlayer->walk(direction);
 	}
 }
@@ -690,6 +781,11 @@ void GameLayer::attackButtonClick(ABType type)
 	if (type == NAttack)
 	{
 		_isAttackButtonRelease = false;
+	}
+
+	if (LanManager::getInstance()->isClient())
+	{
+		LanManager::getInstance()->sendClientInput(0, 0, (int)type);
 	}
 
 	if (type == Item1)
@@ -702,6 +798,7 @@ void GameLayer::attackButtonClick(ABType type)
 	}
 }
 
+
 void GameLayer::gearButtonClick(GearType type)
 {
 	currentPlayer->useGear(type);
@@ -713,7 +810,15 @@ void GameLayer::attackButtonRelease()
 }
 
 void GameLayer::onPause()
+{   if (LanManager::getInstance()->isClient())
 {
+	LanManager::getInstance()->sendClientInput(0, 0, 99);
+}
+else if (currentPlayer && currentPlayer->getState() == State::WALK)
+{
+	currentPlayer->idle();
+}
+
 	if (_isPause)
 		return;
 
@@ -753,7 +858,15 @@ void GameLayer::resumeFromPause()
 }
 
 void GameLayer::onGear()
+{   if (LanManager::getInstance()->isClient())
 {
+	LanManager::getInstance()->sendClientInput(0, 0, 99);
+}
+else if (currentPlayer && currentPlayer->getState() == State::WALK)
+{
+	currentPlayer->idle();
+}
+
 	if (!_enableGear)
 		return;
 	if (_isGear)
