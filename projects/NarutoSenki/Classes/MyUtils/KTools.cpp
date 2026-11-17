@@ -468,10 +468,13 @@ int KTools::readCoinFromSQL()
 	return to_int(coins.c_str());
 }
 
-string KTools::readRecordTimeFromSQL(const char *heroName)
+const char *KTools::readRecordTimeFromSQL(const char *heroName)
 {
-    return readSQLite("CharRecord", "name", heroName, "column3");
+	static string recordTime;
+	recordTime = readSQLite("CharRecord", "name", heroName, "column3");
+	return recordTime.c_str();
 }
+
 
 string KTools::encodeData(string data)
 {
