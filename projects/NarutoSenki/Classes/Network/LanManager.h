@@ -96,3 +96,4 @@ private:
 	vector<NetPlayerInput> _pendingInputs;
 	vector<NetHeroSync> _latestWorldState;
 };
+
