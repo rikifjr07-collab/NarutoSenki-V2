@@ -182,9 +182,16 @@ void GameLayer::onEnter()
 	Layer::onEnter();
 
 	if (_isSurrender)
+{
+	auto lan = LanManager::getInstance();
+	if (lan->isMultiplayer())
 	{
-		onGameOver(false);
+		int myGrp = (playerGroup == Group::Konoha) ? 0 : 1;
+		lan->notifySurrender(myGrp);
 	}
+	onGameOver(false);
+}
+
 }
 
 void GameLayer::onExit()
@@ -537,6 +544,14 @@ void GameLayer::updateNetworkSync(float dt)
 	auto lan = LanManager::getInstance();
 	if (!lan->isMultiplayer())
 		return;
+    int winGrp = lan->getNetworkWinnerGroup();
+if (winGrp != -1)
+{
+	unschedule(schedule_selector(GameLayer::updateNetworkSync));
+	int myGrp = (playerGroup == Group::Konoha) ? 0 : 1;
+	onGameOver(myGrp == winGrp);
+	return;
+}
 
 	if (lan->isHost())
 	{
@@ -734,12 +749,19 @@ void GameLayer::checkTower()
 	}
 
 	if (konohaTowerCount == 0 || akatsukiTowerCount == 0)
+{
+	int winnerGrp = (konohaTowerCount != 0) ? 0 : 1;
+	if (LanManager::getInstance()->isHost())
 	{
-		if (playerGroup == Group::Konoha)
-			onGameOver(konohaTowerCount != 0);
-		else
-			onGameOver(akatsukiTowerCount != 0);
+		LanManager::getInstance()->broadcastGameOver(winnerGrp);
 	}
+
+	if (playerGroup == Group::Konoha)
+		onGameOver(konohaTowerCount != 0);
+	else
+		onGameOver(akatsukiTowerCount != 0);
+}
+
 }
 
 void GameLayer::clearDoubleClick()
