@@ -219,6 +219,7 @@ function SelectLayer:init()
             self:initCustomSelectMode()
         end
     end
+    self:initMultiplayerUI()
 
     local ranking_btn = ui.newImageMenuItem({
         image = '#ranking_btn.png',
@@ -398,6 +399,7 @@ function SelectLayer:setSelected(btn)
         if btn._clickTime >= 2 then
             self:setSelectHero(btn._charName)
             self._playerSelect = self.selectHero
+            CCUserDefault:sharedUserDefault():setStringForKey('net_cmd', 'HERO:' .. btn._charName)
 
             if not self.enableCustomSelect then
                 self._selectImg:removeFromParent()
@@ -427,6 +429,7 @@ function SelectLayer:setSelected(btn)
         if btn._clickTime >= 2 then
             self._com1Select = self.selectHero
             self:setCom1Select(self._com1Select)
+            CCUserDefault:sharedUserDefault():setStringForKey('net_cmd', 'HERO:' .. btn._charName)
 
             self._comLabel1:stopAllActions()
             self._comLabel1:setOpacity(255)
@@ -440,6 +443,7 @@ function SelectLayer:setSelected(btn)
         if btn._clickTime >= 2 then
             self._com2Select = self.selectHero
             self:setCom2Select(self._com2Select)
+            CCUserDefault:sharedUserDefault():setStringForKey('net_cmd', 'HERO:' .. btn._charName)
 
             self._comLabel2:stopAllActions()
             self._comLabel2:setOpacity(255)
@@ -453,6 +457,7 @@ function SelectLayer:setSelected(btn)
         if btn._clickTime >= 2 then
             self._com3Select = self.selectHero
             self:setCom3Select(self._com3Select)
+            CCUserDefault:sharedUserDefault():setStringForKey('net_cmd', 'HERO:' .. btn._charName)
 
             self._comLabel3:stopAllActions()
             self._comLabel3:setOpacity(255)
@@ -472,6 +477,135 @@ function SelectLayer:noComSelect()
         return self._com2Select
     else
         return self._playerSelect
+    end
+end
+function SelectLayer:initMultiplayerUI()
+    if not self.is3v3Mode then return end
+
+    local width, height = display.width, display.height
+    local ud = CCUserDefault:sharedUserDefault()
+
+    self._netStatusLabel = CCLabelTTF:create('Mode: Offline (3v3)', 'Arial', 11)
+    self._netStatusLabel:setAnchorPoint(CCPoint(0, 0.5))
+    self._netStatusLabel:setPosition(110, height - 18)
+    self:addChild(self._netStatusLabel, 60)
+
+    local hostLabel = CCLabelTTF:create('[ HOST LAN ]', 'Arial', 12)
+    local hostBtn = CCMenuItemLabel:create(hostLabel)
+    hostBtn:registerScriptTapHandler(function()
+        ud:setStringForKey('net_cmd', 'HOST')
+        audio.playSound('Audio/Menu/confirm.ogg')
+    end)
+
+    local editBg = CCScale9Sprite:createWithSpriteFrameName('team_bg.png')
+    self._ipEditBox = CCEditBox:create(CCSizeMake(110, 22), editBg)
+    self._ipEditBox:setFontName('Arial')
+    self._ipEditBox:setFontSize(11)
+    self._ipEditBox:setFontColor(ccc3(255, 255, 255))
+    self._ipEditBox:setPlaceHolder('Ketik IP Host...')
+    self._ipEditBox:setPlaceholderFontColor(ccc3(200, 200, 200))
+    self._ipEditBox:setMaxLength(20)
+    self._ipEditBox:setReturnType(kKeyboardReturnTypeDone)
+    self._ipEditBox:setPosition(width - 175, height - 18)
+    self:addChild(self._ipEditBox, 60)
+
+    local joinLabel = CCLabelTTF:create('[ JOIN ]', 'Arial', 12)
+    local joinBtn = CCMenuItemLabel:create(joinLabel)
+    joinBtn:registerScriptTapHandler(function()
+        local ip = self._ipEditBox:getText()
+        if ip and ip ~= '' then
+            ud:setStringForKey('net_cmd', 'JOIN:' .. ip)
+            audio.playSound('Audio/Menu/confirm.ogg')
+        end
+    end)
+
+    local netMenu = ui.newMenu({hostBtn, joinBtn})
+    netMenu:setPosition(0, 0)
+    hostBtn:setPosition(width - 265, height - 18)
+    joinBtn:setPosition(width - 90, height - 18)
+    self:addChild(netMenu, 60)
+
+    self._slotIcons = {}
+    self._slotTags = {}
+    local slotMenuItems = {}
+
+    for i = 0, 5 do
+        local isEnemySide = (i >= 3)
+        local col = i % 3
+        local posX = 12 + col * 42
+        local posY = isEnemySide and 142 or 194
+
+        local slotBtn = ui.newImageMenuItem({
+            image = '#unknow_select.png',
+            listener = function()
+                local myId = ud:getIntegerForKey('net_my_id', 0)
+                if myId > 0 then
+                    ud:setStringForKey('net_cmd', 'MOVE:' .. tostring(i))
+                    audio.playSound('Audio/Menu/select.ogg')
+                end
+            end
+        })
+        slotBtn:setAnchorPoint(CCPoint(0, 0))
+        slotBtn:setPosition(posX, posY)
+        table.insert(slotMenuItems, slotBtn)
+
+        local icon = display.newSprite('#unknow_select.png', posX, posY)
+        icon:setAnchorPoint(CCPoint(0, 0))
+        self:addChild(icon, 55)
+        self._slotIcons[i] = icon
+
+        local sideTag = isEnemySide and 'AKA ' or 'KON '
+        local tagLabel = CCLabelTTF:create(sideTag .. 'COM', 'Arial', 9)
+        tagLabel:setAnchorPoint(CCPoint(0.5, 1))
+        tagLabel:setPosition(posX + 16, posY - 1)
+        self:addChild(tagLabel, 56)
+        self._slotTags[i] = tagLabel
+    end
+
+    local slotMenu = ui.newMenu(slotMenuItems)
+    slotMenu:setPosition(0, 0)
+    self:addChild(slotMenu, 54)
+
+    self:schedule(function()
+        self:refreshMultiplayerSlots()
+    end, 0.2)
+end
+
+function SelectLayer:refreshMultiplayerSlots()
+    local ud = CCUserDefault:sharedUserDefault()
+    local status = ud:getStringForKey('net_status', 'Offline')
+    local myId = ud:getIntegerForKey('net_my_id', 0)
+
+    if self._netStatusLabel then
+        self._netStatusLabel:setString(status)
+    end
+
+    if myId == 0 then return end
+
+    for i = 0, 5 do
+        local owner = ud:getIntegerForKey('net_slot_owner_' .. tostring(i), 0)
+        local hero = ud:getStringForKey('net_slot_hero_' .. tostring(i), '')
+        local sideTag = (i >= 3) and 'AKA ' or 'KON '
+
+        if owner == 0 then
+            self._slotTags[i]:setString(sideTag .. 'COM')
+            self._slotTags[i]:setColor(ccc3(200, 200, 200))
+        else
+            self._slotTags[i]:setString(sideTag .. tostring(owner) .. 'P')
+            self._slotTags[i]:setColor(owner == myId and ccc3(100, 255, 100) or ccc3(255, 220, 100))
+        end
+
+        if hero ~= '' then
+            local frame = display.newSpriteFrame(hero .. '_small.png')
+            if frame then
+                self._slotIcons[i]:setDisplayFrame(frame)
+            end
+        else
+            local frame = display.newSpriteFrame('unknow_select.png')
+            if frame then
+                self._slotIcons[i]:setDisplayFrame(frame)
+            end
+        end
     end
 end
 
