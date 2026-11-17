@@ -8,7 +8,7 @@
 #define RES_X 570
 #define RES_y 320
 
-#define kSpeedBase 480 / 1280
+#define kSpeedBase 0.55f
 
 extern int Cheats;
 #define kMaxCheats 7
