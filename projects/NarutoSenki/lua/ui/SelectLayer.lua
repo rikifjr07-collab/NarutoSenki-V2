@@ -429,8 +429,7 @@ function SelectLayer:setSelected(btn)
         if btn._clickTime >= 2 then
             self._com1Select = self.selectHero
             self:setCom1Select(self._com1Select)
-            CCUserDefault:sharedUserDefault():setStringForKey('net_cmd', 'HERO:' .. btn._charName)
-
+            
             self._comLabel1:stopAllActions()
             self._comLabel1:setOpacity(255)
             self._comLabel1:setDisplayFrame(
@@ -443,8 +442,7 @@ function SelectLayer:setSelected(btn)
         if btn._clickTime >= 2 then
             self._com2Select = self.selectHero
             self:setCom2Select(self._com2Select)
-            CCUserDefault:sharedUserDefault():setStringForKey('net_cmd', 'HERO:' .. btn._charName)
-
+            
             self._comLabel2:stopAllActions()
             self._comLabel2:setOpacity(255)
             self._comLabel2:setDisplayFrame(
@@ -457,7 +455,7 @@ function SelectLayer:setSelected(btn)
         if btn._clickTime >= 2 then
             self._com3Select = self.selectHero
             self:setCom3Select(self._com3Select)
-            CCUserDefault:sharedUserDefault():setStringForKey('net_cmd', 'HERO:' .. btn._charName)
+            
 
             self._comLabel3:stopAllActions()
             self._comLabel3:setOpacity(255)
