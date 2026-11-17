@@ -20,6 +20,7 @@ public:
 	void setSelectList(CCArray *var) { _selectList = var; }
 
 	void onGameStart();
+	void updateNetworkLobby(float dt);
 	void setPlayerSelected(const char *charName) {}
 
 	CREATE_FUNC(SelectLayer);
