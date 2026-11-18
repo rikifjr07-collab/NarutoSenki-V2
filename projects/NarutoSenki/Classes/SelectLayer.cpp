@@ -109,16 +109,16 @@ void SelectLayer::updateNetworkLobby(float dt)
 	}
 }
 
-void SelectLayer::onExitTransitionDidStart()
+void SelectLayer::onExit()
 {
-	Layer::onExitTransitionDidStart();
 	unschedule(schedule_selector(SelectLayer::updateNetworkLobby));
 	setKeypadEnabled(false);
+	Layer::onExit();
 }
 
-void SelectLayer::onEnterTransitionDidFinish()
+void SelectLayer::onEnter()
 {
-	Layer::onEnterTransitionDidFinish();
+	Layer::onEnter();
 	setKeypadEnabled(true);
 	UserDefault::sharedUserDefault()->setStringForKey("net_cmd", "");
 	schedule(schedule_selector(SelectLayer::updateNetworkLobby), 0.15f);
