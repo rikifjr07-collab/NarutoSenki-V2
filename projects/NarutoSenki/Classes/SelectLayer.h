@@ -26,8 +26,9 @@ public:
 	CREATE_FUNC(SelectLayer);
 
 private:
-	void onExitTransitionDidStart();
-	void onEnterTransitionDidFinish();
+	virtual void onEnter();
+	virtual void onExit();
+
 	void keyBackClicked();
 
 	bool isStart = false;
