@@ -6,6 +6,7 @@
 #include "MyUtils/CCShake.h"
 #include "Systems/CommandSystem.hpp"
 #include "Utils/Debug/UnitDebug.hpp"
+#include "Network/LanManager.h"
 
 CharacterBase::CharacterBase()
 {
@@ -4589,6 +4590,11 @@ void CharacterBase::setAI(float dt)
 
 void CharacterBase::doAI()
 {
+	if (_isRemoteControlled || LanManager::getInstance()->isClient())
+{
+	return;
+}
+
 	_isAI = true;
 	schedule(schedule_selector(CharacterBase::setAI), 0.1f);
 }
