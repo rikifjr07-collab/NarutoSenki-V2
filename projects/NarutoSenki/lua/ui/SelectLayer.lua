@@ -339,8 +339,9 @@ function SelectLayer:initCustomSelectMode()
         teamSelector:addChild(self._comLabel3)
         self._comSelector3 = comSelector3
     end
-
+    self._teamSelector = teamSelector
     self:addChild(teamSelector, 50)
+
 end
 
 function SelectLayer:onQuestBtn()
