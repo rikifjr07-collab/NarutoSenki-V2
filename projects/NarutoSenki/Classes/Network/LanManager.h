@@ -29,6 +29,8 @@ struct NetHeroSync
 	int state = 0;
 	uint32_t hp = 0;
 	uint32_t maxHp = 0;
+	int lastAttack = -1;
+	int attackSeq = 0;
 };
 
 class LanManager
