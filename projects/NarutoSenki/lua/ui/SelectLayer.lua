@@ -483,9 +483,9 @@ function SelectLayer:initMultiplayerUI()
     local width, height = display.width, display.height
     local ud = CCUserDefault:sharedUserDefault()
 
-    self._netStatusLabel = CCLabelTTF:create('Mode: Offline (3v3)', 'Arial', 11)
+    self._netStatusLabel = CCLabelTTF:create('Status: Offline (3v3)', 'Arial', 11)
     self._netStatusLabel:setAnchorPoint(CCPoint(0, 0.5))
-    self._netStatusLabel:setPosition(110, height - 18)
+    self._netStatusLabel:setPosition(8, height - 42)
     self:addChild(self._netStatusLabel, 60)
 
     local hostLabel = CCLabelTTF:create('[ HOST LAN ]', 'Arial', 12)
@@ -523,6 +523,10 @@ function SelectLayer:initMultiplayerUI()
     joinBtn:setPosition(width - 90, height - 18)
     self:addChild(netMenu, 60)
 
+    self._mpSlotLayer = display.newLayer()
+    self._mpSlotLayer:setVisible(false)
+    self:addChild(self._mpSlotLayer, 55)
+
     self._slotIcons = {}
     self._slotTags = {}
     local slotMenuItems = {}
@@ -549,20 +553,20 @@ function SelectLayer:initMultiplayerUI()
 
         local icon = display.newSprite('#unknow_select.png', posX, posY)
         icon:setAnchorPoint(CCPoint(0, 0))
-        self:addChild(icon, 55)
+        self._mpSlotLayer:addChild(icon, 2)
         self._slotIcons[i] = icon
 
         local sideTag = isEnemySide and 'AKA ' or 'KON '
         local tagLabel = CCLabelTTF:create(sideTag .. 'COM', 'Arial', 9)
         tagLabel:setAnchorPoint(CCPoint(0.5, 1))
         tagLabel:setPosition(posX + 16, posY - 1)
-        self:addChild(tagLabel, 56)
+        self._mpSlotLayer:addChild(tagLabel, 3)
         self._slotTags[i] = tagLabel
     end
 
     local slotMenu = ui.newMenu(slotMenuItems)
     slotMenu:setPosition(0, 0)
-    self:addChild(slotMenu, 54)
+    self._mpSlotLayer:addChild(slotMenu, 1)
 
     self:schedule(function()
         self:refreshMultiplayerSlots()
@@ -571,14 +575,21 @@ end
 
 function SelectLayer:refreshMultiplayerSlots()
     local ud = CCUserDefault:sharedUserDefault()
-    local status = ud:getStringForKey('net_status', 'Offline')
+    local status = ud:getStringForKey('net_status', 'Status: Offline (3v3)')
     local myId = ud:getIntegerForKey('net_my_id', 0)
 
     if self._netStatusLabel then
         self._netStatusLabel:setString(status)
     end
 
-    if myId == 0 then return end
+    if myId == 0 then
+        if self._mpSlotLayer then self._mpSlotLayer:setVisible(false) end
+        if self._teamSelector then self._teamSelector:setVisible(true) end
+        return
+    end
+
+    if self._mpSlotLayer then self._mpSlotLayer:setVisible(true) end
+    if self._teamSelector then self._teamSelector:setVisible(false) end
 
     for i = 0, 5 do
         local owner = ud:getIntegerForKey('net_slot_owner_' .. tostring(i), 0)
