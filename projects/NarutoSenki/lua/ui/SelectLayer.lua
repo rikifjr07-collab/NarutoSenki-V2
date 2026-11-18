@@ -487,7 +487,7 @@ function SelectLayer:initMultiplayerUI()
     self._netStatusLabel = CCLabelTTF:create('Status: Offline (3v3)', 'Arial', 11)
     self._netStatusLabel:setAnchorPoint(CCPoint(0, 0.5))
     self._netStatusLabel:setPosition(8, height - 42)
-    self:addChild(self._netStatusLabel, 60)
+    self:addChild(self._netStatusLabel, 120)
 
     local hostLabel = CCLabelTTF:create('[ HOST LAN ]', 'Arial', 12)
     local hostBtn = CCMenuItemLabel:create(hostLabel)
@@ -506,7 +506,7 @@ function SelectLayer:initMultiplayerUI()
     self._ipEditBox:setMaxLength(20)
     self._ipEditBox:setReturnType(kKeyboardReturnTypeDone)
     self._ipEditBox:setPosition(width - 175, height - 18)
-    self:addChild(self._ipEditBox, 60)
+    self:addChild(self._ipEditBox, 120)
 
     local joinLabel = CCLabelTTF:create('[ JOIN ]', 'Arial', 12)
     local joinBtn = CCMenuItemLabel:create(joinLabel)
@@ -522,52 +522,60 @@ function SelectLayer:initMultiplayerUI()
     netMenu:setPosition(0, 0)
     hostBtn:setPosition(width - 265, height - 18)
     joinBtn:setPosition(width - 90, height - 18)
-    self:addChild(netMenu, 60)
+    self:addChild(netMenu, 120)
 
+    -- Wadah 6 Slot Tim di Z-Order tinggi (110) agar selalu terlihat & bisa disentuh
     self._mpSlotLayer = display.newLayer()
     self._mpSlotLayer:setVisible(false)
-    self:addChild(self._mpSlotLayer, 55)
+    self:addChild(self._mpSlotLayer, 110)
+
+    local panelBg = CCScale9Sprite:createWithSpriteFrameName('team_bg.png')
+    panelBg:setContentSize(CCSizeMake(135, 108))
+    panelBg:setAnchorPoint(CCPoint(0, 0))
+    panelBg:setPosition(6, 128)
+    self._mpSlotLayer:addChild(panelBg, 1)
 
     self._slotIcons = {}
     self._slotTags = {}
     local slotMenuItems = {}
 
     for i = 0, 5 do
+        local slotIndex = i
         local isEnemySide = (i >= 3)
         local col = i % 3
         local posX = 12 + col * 42
-        local posY = isEnemySide and 142 or 194
-
-        local slotBtn = ui.newImageMenuItem({
-            image = '#unknow_select.png',
-            listener = function()
-                local myId = ud:getIntegerForKey('net_my_id', 0)
-                if myId > 0 then
-                    ud:setStringForKey('net_cmd', 'MOVE:' .. tostring(i))
-                    audio.playSound('Audio/Menu/select.ogg')
-                end
-            end
-        })
-        slotBtn:setAnchorPoint(CCPoint(0, 0))
-        slotBtn:setPosition(posX, posY)
-        table.insert(slotMenuItems, slotBtn)
+        local posY = isEnemySide and 144 or 194
 
         local icon = display.newSprite('#unknow_select.png', posX, posY)
         icon:setAnchorPoint(CCPoint(0, 0))
-        self._mpSlotLayer:addChild(icon, 2)
+        self._mpSlotLayer:addChild(icon, 3)
         self._slotIcons[i] = icon
+
+        -- Gunakan area sentuh tombol transparan seukuran kotak ikon agar pasti merespons sentuhan
+        local touchLabel = CCLabelTTF:create('     ', 'Arial', 26)
+        local slotBtn = CCMenuItemLabel:create(touchLabel)
+        slotBtn:setAnchorPoint(CCPoint(0, 0))
+        slotBtn:setPosition(posX, posY)
+        slotBtn:registerScriptTapHandler(function()
+            local myId = ud:getIntegerForKey('net_my_id', 0)
+            if myId > 0 then
+                ud:setStringForKey('net_cmd', 'MOVE:' .. tostring(slotIndex))
+                audio.playSound('Audio/Menu/select.ogg')
+            end
+        end)
+        table.insert(slotMenuItems, slotBtn)
 
         local sideTag = isEnemySide and 'AKA ' or 'KON '
         local tagLabel = CCLabelTTF:create(sideTag .. 'COM', 'Arial', 9)
         tagLabel:setAnchorPoint(CCPoint(0.5, 1))
         tagLabel:setPosition(posX + 16, posY - 1)
-        self._mpSlotLayer:addChild(tagLabel, 3)
+        self._mpSlotLayer:addChild(tagLabel, 4)
         self._slotTags[i] = tagLabel
     end
 
     local slotMenu = ui.newMenu(slotMenuItems)
     slotMenu:setPosition(0, 0)
-    self._mpSlotLayer:addChild(slotMenu, 1)
+    self._mpSlotLayer:addChild(slotMenu, 5)
 
     self:schedule(function()
         self:refreshMultiplayerSlots()
