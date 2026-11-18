@@ -1586,7 +1586,10 @@ void CharacterBase::setSkillEffect(const string &type)
 }
 
 void CharacterBase::setItem(ABType type)
-{
+{   
+	_netLastAttack = (int)Item1;
+    _netAttackSeq++;
+
 	if (_isControlled)
 		return;
 
@@ -3649,7 +3652,10 @@ float CharacterBase::getHpPercent()
 }
 
 void CharacterBase::attack(ABType type)
-{
+{   
+	_netLastAttack = (int)type;
+    _netAttackSeq++;
+
 	if (isPlayer() && type == NAttack)
 	{
 		if (!getGameLayer()->getSkillFinish() && !_isOnlySkillLocked)
