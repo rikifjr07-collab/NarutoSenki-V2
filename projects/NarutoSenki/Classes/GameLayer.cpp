@@ -34,6 +34,7 @@ void BattleRuntimeSystem::onGameStart(GameLayer *layer, bool skipInitFlogs, floa
 
 	layer->setKeyEventHandler();
 auto lan = LanManager::getInstance();
+int myId = lan->getMyPlayerId();
 for (int i = 0; i < (int)layer->_CharacterArray.size(); i++)
 {
 	auto hero = layer->_CharacterArray[i];
@@ -41,6 +42,8 @@ for (int i = 0; i < (int)layer->_CharacterArray.size(); i++)
 
 	if (lan->isClient())
 	{
+		if (hero != layer->currentPlayer)
+			hero->_isRemoteControlled = true;
 		continue;
 	}
 	else if (lan->isHost())
@@ -50,13 +53,16 @@ for (int i = 0; i < (int)layer->_CharacterArray.size(); i++)
 		{
 			hero->doAI();
 		}
+		else if (slot.ownerId != myId)
+		{
+			hero->_isRemoteControlled = true;
+		}
 	}
 	else if (hero->isCom())
 	{
 		hero->doAI();
 	}
 }
-
 
 if (LanManager::getInstance()->isMultiplayer())
 {
@@ -634,34 +640,47 @@ void GameLayer::updateNetworkSync(float dt)
 			for (auto hero : _CharacterArray)
 			{
 				if (hero && hero->getCharId() == st.charId)
-				{
-					float oldX = hero->getPositionX();
-					float oldY = hero->getPositionY();
-					hero->setPosition(Vec2(st.x, st.y));
-					hero->_isFlipped = st.isFlipped;
-					hero->setFlipX(st.isFlipped);
-					hero->setZOrder(-st.y);
-					hero->setHPValue(st.hp, false);
+{
+	// 1. Sinkronkan status mati dan hidup kembali (respawn) dari Host
+	if (st.hp == 0 && hero->getState() != State::DEAD)
+	{
+		hero->setHPValue(0, false);
+		hero->dead();
+		break;
+	}
+	else if (st.hp > 0 && hero->getState() == State::DEAD)
+	{
+		hero->reborn(0);
+	}
 
-					if (st.attackSeq > hero->_netAttackSeq && st.lastAttack >= 0)
-					{
-						hero->_netAttackSeq = st.attackSeq;
-						if (st.lastAttack == (int)Item1)
-							hero->setItem(Item1);
-						else
-							hero->attack((ABType)st.lastAttack);
-					}
-					else if (st.state == (int)State::WALK || std::abs(st.x - oldX) > 0.5f || std::abs(st.y - oldY) > 0.5f)
-					{
-						if (hero->getState() == State::IDLE)
-							hero->walk(Vec2(st.isFlipped ? -1.0f : 1.0f, 0.0f));
-					}
-					else if (st.state == (int)State::IDLE && hero->getState() == State::WALK)
-					{
-						hero->idle();
-					}
-					break;
-				}
+	float oldX = hero->getPositionX();
+	float oldY = hero->getPositionY();
+	hero->setPosition(Vec2(st.x, st.y));
+	hero->_isFlipped = st.isFlipped;
+	hero->setFlipX(st.isFlipped);
+	hero->setZOrder(-st.y);
+	hero->setHPValue(st.hp, false);
+
+	if (st.attackSeq > hero->_netAttackSeq && st.lastAttack >= 0)
+	{
+		hero->_netAttackSeq = st.attackSeq;
+		if (st.lastAttack == (int)Item1)
+			hero->setItem(Item1);
+		else
+			hero->attack((ABType)st.lastAttack);
+	}
+	else if (st.state == (int)State::WALK || std::abs(st.x - oldX) > 0.5f || std::abs(st.y - oldY) > 0.5f)
+	{
+		if (hero->getState() == State::IDLE)
+			hero->walk(Vec2(st.isFlipped ? -1.0f : 1.0f, 0.0f));
+	}
+	else if (st.state == (int)State::IDLE && hero->getState() == State::WALK)
+	{
+		hero->idle();
+	}
+	break;
+}
+
 			}
 		}
 	}
@@ -983,7 +1002,9 @@ void GameLayer::onLeft()
 	SimpleAudioEngine::sharedEngine()->stopAllEffects();
 	SimpleAudioEngine::sharedEngine()->stopBackgroundMusic(true);
 
-	lua_call_func(UiFlowKeys::kOnGameOver);
+	unschedule(schedule_selector(GameLayer::updateNetworkSync));
+    LanManager::getInstance()->disconnect();
+    lua_call_func(UiFlowKeys::kOnGameOver);
 }
 
 void GameLayer::checkBackgroundMusic(float dt)
