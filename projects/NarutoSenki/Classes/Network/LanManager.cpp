@@ -457,7 +457,7 @@ void LanManager::broadcastWorldState(const vector<NetHeroSync> &heroes)
 	for (size_t i = 0; i < heroes.size(); i++)
 	{
 		const auto &h = heroes[i];
-		pkt += format("{},{:.1f},{:.1f},{},{},{},{}", h.charId, h.x, h.y, h.isFlipped ? 1 : 0, h.state, h.hp, h.maxHp);
+		pkt += format("{},{:.1f},{:.1f},{},{},{},{},{},{}", h.charId, h.x, h.y, h.isFlipped ? 1 : 0, h.state, h.hp, h.maxHp, h.lastAttack, h.attackSeq);
 		if (i + 1 < heroes.size()) pkt += ";";
 	}
 
@@ -471,6 +471,7 @@ void LanManager::broadcastWorldState(const vector<NetHeroSync> &heroes)
 		sendto(_udpSocket, pkt.c_str(), pkt.size(), 0, (sockaddr *)&dest, sizeof(dest));
 	}
 }
+
 
 void LanManager::udpReceiveLoop()
 {
@@ -492,23 +493,24 @@ void LanManager::udpReceiveLoop()
 			_pendingInputs.push_back(inp);
 		}
 		else if (_isClient && pkt.find("WS:") == 0)
+{
+	vector<NetHeroSync> list;
+	std::stringstream ss(pkt.substr(3));
+	string seg;
+	while (std::getline(ss, seg, ';'))
+	{
+		NetHeroSync h{};
+		int flip = 0;
+		if (sscanf(seg.c_str(), "%d,%f,%f,%d,%d,%u,%u,%d,%d", &h.charId, &h.x, &h.y, &flip, &h.state, &h.hp, &h.maxHp, &h.lastAttack, &h.attackSeq) == 9)
 		{
-			vector<NetHeroSync> list;
-			std::stringstream ss(pkt.substr(3));
-			string seg;
-			while (std::getline(ss, seg, ';'))
-			{
-				NetHeroSync h{};
-				int flip = 0;
-				if (sscanf(seg.c_str(), "%d,%f,%f,%d,%d,%u,%u", &h.charId, &h.x, &h.y, &flip, &h.state, &h.hp, &h.maxHp) == 7)
-				{
-					h.isFlipped = (flip == 1);
-					list.push_back(h);
-				}
-			}
-			std::lock_guard<std::mutex> lock(_dataMutex);
-			_latestWorldState = list;
+			h.isFlipped = (flip == 1);
+			list.push_back(h);
 		}
+	}
+	std::lock_guard<std::mutex> lock(_dataMutex);
+	_latestWorldState = list;
+}
+
 	}
 }
 
