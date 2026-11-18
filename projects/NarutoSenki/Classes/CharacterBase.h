@@ -141,6 +141,8 @@ public:
 
 	VPROP(int,_walkSpeed,WalkSpeed);
 	int					_originSpeed;
+    int _netLastAttack = -1;
+    int _netAttackSeq = 0;
 
 	PROP_UInt(_hp, HP);
 	PROP_UInt(_maxHP, MaxHP);
