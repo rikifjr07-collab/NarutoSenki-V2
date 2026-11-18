@@ -33,12 +33,30 @@ void BattleRuntimeSystem::onGameStart(GameLayer *layer, bool skipInitFlogs, floa
 	}
 
 	layer->setKeyEventHandler();
-for (auto hero : layer->_CharacterArray)
+auto lan = LanManager::getInstance();
+for (int i = 0; i < (int)layer->_CharacterArray.size(); i++)
 {
+	auto hero = layer->_CharacterArray[i];
 	hero->setWalkSpeed(hero->_originSpeed);
-	if (hero->isCom() && !LanManager::getInstance()->isClient())
+
+	if (lan->isClient())
+	{
+		continue;
+	}
+	else if (lan->isHost())
+	{
+		NetSlotData slot = lan->getSlot(i);
+		if (slot.ownerId == 0)
+		{
+			hero->doAI();
+		}
+	}
+	else if (hero->isCom())
+	{
 		hero->doAI();
+	}
 }
+
 
 if (LanManager::getInstance()->isMultiplayer())
 {
@@ -544,14 +562,15 @@ void GameLayer::updateNetworkSync(float dt)
 	auto lan = LanManager::getInstance();
 	if (!lan->isMultiplayer())
 		return;
-    int winGrp = lan->getNetworkWinnerGroup();
-if (winGrp != -1)
-{
-	unschedule(schedule_selector(GameLayer::updateNetworkSync));
-	int myGrp = (playerGroup == Group::Konoha) ? 0 : 1;
-	onGameOver(myGrp == winGrp);
-	return;
-}
+
+	int winGrp = lan->getNetworkWinnerGroup();
+	if (winGrp != -1)
+	{
+		unschedule(schedule_selector(GameLayer::updateNetworkSync));
+		int myGrp = (playerGroup == Group::Konoha) ? 0 : 1;
+		onGameOver(myGrp == winGrp);
+		return;
+	}
 
 	if (lan->isHost())
 	{
@@ -601,6 +620,8 @@ if (winGrp != -1)
 			item.state = (int)hero->getState();
 			item.hp = hero->getHP();
 			item.maxHp = hero->getMaxHP();
+			item.lastAttack = hero->_netLastAttack;
+			item.attackSeq = hero->_netAttackSeq;
 			snapshot.push_back(item);
 		}
 		lan->broadcastWorldState(snapshot);
@@ -614,17 +635,38 @@ if (winGrp != -1)
 			{
 				if (hero && hero->getCharId() == st.charId)
 				{
+					float oldX = hero->getPositionX();
+					float oldY = hero->getPositionY();
 					hero->setPosition(Vec2(st.x, st.y));
 					hero->_isFlipped = st.isFlipped;
 					hero->setFlipX(st.isFlipped);
 					hero->setZOrder(-st.y);
 					hero->setHPValue(st.hp, false);
+
+					if (st.attackSeq > hero->_netAttackSeq && st.lastAttack >= 0)
+					{
+						hero->_netAttackSeq = st.attackSeq;
+						if (st.lastAttack == (int)Item1)
+							hero->setItem(Item1);
+						else
+							hero->attack((ABType)st.lastAttack);
+					}
+					else if (st.state == (int)State::WALK || std::abs(st.x - oldX) > 0.5f || std::abs(st.y - oldY) > 0.5f)
+					{
+						if (hero->getState() == State::IDLE)
+							hero->walk(Vec2(st.isFlipped ? -1.0f : 1.0f, 0.0f));
+					}
+					else if (st.state == (int)State::IDLE && hero->getState() == State::WALK)
+					{
+						hero->idle();
+					}
 					break;
 				}
 			}
 		}
 	}
 }
+
 
 void GameLayer::setTowerState(int charId)
 {
@@ -689,80 +731,37 @@ void GameLayer::removeOugisMark(int type)
 
 void GameLayer::checkTower()
 {
+	if (LanManager::getInstance()->isClient())
+		return;
+
 	int konohaTowerCount = 0;
 	int akatsukiTowerCount = 0;
-
 	for (auto tower : _TowerArray)
 	{
-		if (tower->isKonohaGroup())
-			konohaTowerCount++;
-		else
-			akatsukiTowerCount++;
-	}
-
-	if (konohaTowerCount == 2)
-	{
-		aName = FlogEnum::PainFlog;
-		kEXPBound = 50;
-	}
-	else if (konohaTowerCount == 1)
-	{
-		aName = FlogEnum::ObitoFlog;
-		kEXPBound = 100;
-	}
-
-	if (akatsukiTowerCount == 2)
-	{
-		kName = FlogEnum::IzumoFlog;
-		aEXPBound = 50;
-	}
-	else if (akatsukiTowerCount == 1)
-	{
-		kName = FlogEnum::KakashiFlog;
-		aEXPBound = 100;
-	}
-
-	for (auto hero : getGameLayer()->_CharacterArray)
-	{
-		if (hero->isNotCom())
-			continue;
-
-		if (hero->isKonohaGroup())
+		if (tower->getHP() > 0)
 		{
-			hero->battleCondiction = konohaTowerCount - akatsukiTowerCount;
-			if (konohaTowerCount == 1)
-			{
-				hero->isBaseDanger = true;
-			}
-		}
-		else
-		{
-			hero->battleCondiction = akatsukiTowerCount - konohaTowerCount;
-			if (_isHardCoreGame)
-			{
-				if (akatsukiTowerCount == 1)
-				{
-					hero->isBaseDanger = true;
-				}
-			}
+			if (tower->isKonohaGroup())
+				konohaTowerCount++;
+			else
+				akatsukiTowerCount++;
 		}
 	}
 
 	if (konohaTowerCount == 0 || akatsukiTowerCount == 0)
-{
-	int winnerGrp = (konohaTowerCount != 0) ? 0 : 1;
-	if (LanManager::getInstance()->isHost())
 	{
-		LanManager::getInstance()->broadcastGameOver(winnerGrp);
+		int winnerGrp = (konohaTowerCount != 0) ? 0 : 1;
+		if (LanManager::getInstance()->isHost())
+		{
+			LanManager::getInstance()->broadcastGameOver(winnerGrp);
+		}
+
+		if (playerGroup == Group::Konoha)
+			onGameOver(konohaTowerCount != 0);
+		else
+			onGameOver(akatsukiTowerCount != 0);
 	}
-
-	if (playerGroup == Group::Konoha)
-		onGameOver(konohaTowerCount != 0);
-	else
-		onGameOver(akatsukiTowerCount != 0);
 }
 
-}
 
 void GameLayer::clearDoubleClick()
 {
