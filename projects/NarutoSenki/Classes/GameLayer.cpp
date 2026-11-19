@@ -613,9 +613,16 @@ void GameLayer::updateNetworkSync(float dt)
 							targetHero->setItem(Item1);
 						}
 						else if (inp.actionType >= 0)
-						{
-							targetHero->attack((ABType)inp.actionType);
-						}
+{
+    if (inp.dirX != 0.0f)
+    {
+        bool flip = (inp.dirX < 0.0f);
+        targetHero->_isFlipped = flip;
+        targetHero->setFlipX(flip);
+    }
+    targetHero->attack((ABType)inp.actionType);
+}
+
 					}
 					break;
 				}
@@ -886,9 +893,11 @@ void GameLayer::attackButtonClick(ABType type)
 	}
 
 	if (LanManager::getInstance()->isClient())
-	{
-		LanManager::getInstance()->sendClientInput(0, 0, (int)type);
-	}
+{
+    float faceDir = (currentPlayer && currentPlayer->_isFlipped) ? -1.0f : 1.0f;
+    LanManager::getInstance()->sendClientInput(faceDir, 0, (int)type);
+}
+
 
 	if (type == Item1)
 	{
