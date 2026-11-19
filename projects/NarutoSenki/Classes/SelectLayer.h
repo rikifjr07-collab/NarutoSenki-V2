@@ -4,7 +4,8 @@
 class SelectLayer : public Layer
 {
 public:
-	~SelectLayer();
+    SelectLayer();
+    ~SelectLayer();
 
 	const char *_selectHero = nullptr;
 	const char *_playerSelect = nullptr;
