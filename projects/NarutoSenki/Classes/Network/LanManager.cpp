@@ -525,6 +525,24 @@ else if (_isClient && pkt.find("PONG:") == 0)
 	std::lock_guard<std::mutex> lock(_dataMutex);
 	_latestWorldState = list;
 }
+    else if (_isClient && pkt.find("FL:") == 0)
+{
+	vector<NetFlogSync> list;
+	std::stringstream ss(pkt.substr(3));
+	string seg;
+	while (std::getline(ss, seg, ';'))
+	{
+		NetFlogSync f{};
+		int flip = 0;
+		if (sscanf(seg.c_str(), "%d,%d,%f,%f,%d,%d,%u", &f.group, &f.index, &f.x, &f.y, &flip, &f.state, &f.hp) == 7)
+		{
+			f.isFlipped = (flip == 1);
+			list.push_back(f);
+		}
+	}
+	std::lock_guard<std::mutex> lock(_dataMutex);
+	_latestFlogState = list;
+}
 
 	}
 }
@@ -583,4 +601,31 @@ void LanManager::sendPing()
 
     string pkt = format("PING:{}", now);
     sendto(_udpSocket, pkt.c_str(), pkt.size(), 0, (sockaddr *)&dest, sizeof(dest));
+}
+void LanManager::broadcastFlogState(const vector<NetFlogSync> &flogs)
+{
+	if (!_isHost || _udpSocket < 0 || flogs.empty()) return;
+	string pkt = "FL:";
+	for (size_t i = 0; i < flogs.size(); i++)
+	{
+		const auto &f = flogs[i];
+		pkt += format("{},{},{:.0f},{:.0f},{},{},{}", f.group, f.index, f.x, f.y, f.isFlipped ? 1 : 0, f.state, f.hp);
+		if (i + 1 < flogs.size()) pkt += ";";
+	}
+
+	std::lock_guard<std::mutex> lock(_dataMutex);
+	for (const auto &ip : _clientIps)
+	{
+		sockaddr_in dest{};
+		dest.sin_family = AF_INET;
+		dest.sin_port = htons(UDP_PORT + 1);
+		inet_pton(AF_INET, ip.c_str(), &dest.sin_addr);
+		sendto(_udpSocket, pkt.c_str(), pkt.size(), 0, (sockaddr *)&dest, sizeof(dest));
+	}
+}
+
+vector<NetFlogSync> LanManager::getLatestFlogState()
+{
+	std::lock_guard<std::mutex> lock(_dataMutex);
+	return _latestFlogState;
 }
