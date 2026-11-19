@@ -14,10 +14,13 @@ struct NetSlotData
 
 struct NetPlayerInput
 {
-	int playerId = 0;
-	float dirX = 0.0f;
-	float dirY = 0.0f;
-	int actionType = -1;  // -1 = None, 0 = NAttack, 1..5 = Skill, 6 = Item1
+    int playerId = 0;
+    float dirX = 0.0f;
+    float dirY = 0.0f;
+    int actionType = -1;  // -1 = None/Move, 0 = NAttack, 1..5 = Skill, 6 = Item1, 99 = Idle
+    float posX = 0.0f;
+    float posY = 0.0f;
+    bool isFlipped = false;
 };
 
 struct NetHeroSync
@@ -77,7 +80,7 @@ public:
 	int getMySlotIndex();
 
 	// Sinkronisasi Pertarungan (In-Game)
-	void sendClientInput(float dirX, float dirY, int actionType);
+	void sendClientInput(float dirX, float dirY, int actionType, float posX = 0.0f, float posY = 0.0f, bool isFlipped = false);
 	void broadcastWorldState(const vector<NetHeroSync> &heroes);
 	vector<NetPlayerInput> popPendingInputs();
 	vector<NetHeroSync> getLatestWorldState();
