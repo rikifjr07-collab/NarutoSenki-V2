@@ -75,6 +75,8 @@ public:
 	void broadcastWorldState(const vector<NetHeroSync> &heroes);
 	vector<NetPlayerInput> popPendingInputs();
 	vector<NetHeroSync> getLatestWorldState();
+    void broadcastFlogState(const vector<NetFlogSync> &flogs);
+    vector<NetFlogSync> getLatestFlogState();
     void notifySurrender(int myGroup);
     void broadcastGameOver(int winnerGroup);
     int getNetworkWinnerGroup() const { return _winnerGroup; }
@@ -110,5 +112,6 @@ private:
 	vector<string> _clientIps;
 	vector<NetPlayerInput> _pendingInputs;
 	vector<NetHeroSync> _latestWorldState;
+    vector<NetFlogSync> _latestFlogState;
 };
 
