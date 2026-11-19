@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sstream>
+#include <chrono>
 
 static LanManager *s_lanInstance = nullptr;
 constexpr int TCP_PORT = 8889;
@@ -65,7 +66,8 @@ void LanManager::disconnect()
 	_isClient = false;
 	_gameStarted = false;
     _winnerGroup = -1;
-
+    _pingMs = 0;
+	
 	if (_tcpSocket >= 0) { close(_tcpSocket); _tcpSocket = -1; }
 	if (_udpSocket >= 0) { close(_udpSocket); _udpSocket = -1; }
 
@@ -492,6 +494,19 @@ void LanManager::udpReceiveLoop()
 			std::lock_guard<std::mutex> lock(_dataMutex);
 			_pendingInputs.push_back(inp);
 		}
+		else if (_isHost && pkt.find("PING:") == 0)
+{
+    string reply = "PONG:" + pkt.substr(5);
+    sendto(_udpSocket, reply.c_str(), reply.size(), 0, (sockaddr *)&sender, slen);
+}
+else if (_isClient && pkt.find("PONG:") == 0)
+{
+    long long sentTime = std::stoll(pkt.substr(5));
+    auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    int rtt = static_cast<int>(now - sentTime);
+    _pingMs = (rtt < 0) ? 0 : rtt;
+}
 		else if (_isClient && pkt.find("WS:") == 0)
 {
 	vector<NetHeroSync> list;
@@ -553,4 +568,19 @@ void LanManager::broadcastGameOver(int winnerGroup)
 		if (fd >= 0)
 			send(fd, msg.c_str(), msg.size(), 0);
 	}
+}
+void LanManager::sendPing()
+{
+    if (!_isClient || _udpSocket < 0) return;
+
+    auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+
+    sockaddr_in dest{};
+    dest.sin_family = AF_INET;
+    dest.sin_port = htons(UDP_PORT);
+    inet_pton(AF_INET, _hostIp.c_str(), &dest.sin_addr);
+
+    string pkt = format("PING:{}", now);
+    sendto(_udpSocket, pkt.c_str(), pkt.size(), 0, (sockaddr *)&dest, sizeof(dest));
 }
