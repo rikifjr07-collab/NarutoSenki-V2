@@ -42,6 +42,12 @@ struct NetFlogSync
 	int state = 0;
 	uint32_t hp = 0;
 };
+struct NetTowerSync
+{
+	int charId = 0;
+	uint32_t hp = 0;
+	uint32_t maxHp = 0;
+};
 
 class LanManager
 {
@@ -77,6 +83,8 @@ public:
 	vector<NetHeroSync> getLatestWorldState();
     void broadcastFlogState(const vector<NetFlogSync> &flogs);
     vector<NetFlogSync> getLatestFlogState();
+    void broadcastTowerState(const vector<NetTowerSync> &towers);
+    vector<NetTowerSync> getLatestTowerState();
     void notifySurrender(int myGroup);
     void broadcastGameOver(int winnerGroup);
     int getNetworkWinnerGroup() const { return _winnerGroup; }
@@ -113,5 +121,6 @@ private:
 	vector<NetPlayerInput> _pendingInputs;
 	vector<NetHeroSync> _latestWorldState;
     vector<NetFlogSync> _latestFlogState;
+    vector<NetTowerSync> _latestTowerState;
 };
 
