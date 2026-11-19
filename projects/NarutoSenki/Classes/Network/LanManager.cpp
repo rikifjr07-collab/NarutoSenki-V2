@@ -543,6 +543,22 @@ else if (_isClient && pkt.find("PONG:") == 0)
 	std::lock_guard<std::mutex> lock(_dataMutex);
 	_latestFlogState = list;
 }
+else if (_isClient && pkt.find("TW:") == 0)
+{
+	vector<NetTowerSync> list;
+	std::stringstream ss(pkt.substr(3));
+	string seg;
+	while (std::getline(ss, seg, ';'))
+	{
+		NetTowerSync t{};
+		if (sscanf(seg.c_str(), "%d,%u,%u", &t.charId, &t.hp, &t.maxHp) == 3)
+		{
+			list.push_back(t);
+		}
+	}
+	std::lock_guard<std::mutex> lock(_dataMutex);
+	_latestTowerState = list;
+}
 
 	}
 }
@@ -628,4 +644,31 @@ vector<NetFlogSync> LanManager::getLatestFlogState()
 {
 	std::lock_guard<std::mutex> lock(_dataMutex);
 	return _latestFlogState;
+}
+void LanManager::broadcastTowerState(const vector<NetTowerSync> &towers)
+{
+	if (!_isHost || _udpSocket < 0 || towers.empty()) return;
+	string pkt = "TW:";
+	for (size_t i = 0; i < towers.size(); i++)
+	{
+		const auto &t = towers[i];
+		pkt += format("{},{},{}", t.charId, t.hp, t.maxHp);
+		if (i + 1 < towers.size()) pkt += ";";
+	}
+
+	std::lock_guard<std::mutex> lock(_dataMutex);
+	for (const auto &ip : _clientIps)
+	{
+		sockaddr_in dest{};
+		dest.sin_family = AF_INET;
+		dest.sin_port = htons(UDP_PORT + 1);
+		inet_pton(AF_INET, ip.c_str(), &dest.sin_addr);
+		sendto(_udpSocket, pkt.c_str(), pkt.size(), 0, (sockaddr *)&dest, sizeof(dest));
+	}
+}
+
+vector<NetTowerSync> LanManager::getLatestTowerState()
+{
+	std::lock_guard<std::mutex> lock(_dataMutex);
+	return _latestTowerState;
 }
