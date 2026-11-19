@@ -2,6 +2,7 @@
 #include "GameLayer.h"
 #include "HudLayer.h"
 #include "MyUtils/CCShake.h"
+#include "Network/LanManager.h"
 
 MiniIcon::MiniIcon()
 {
@@ -536,6 +537,16 @@ void HudLayer::initHeroInterface()
 	// Call after all addChild functions
 	// thats can make ActionButton::setLock -> setMask work
 	updateSpecialSkillButtons();
+    if (LanManager::getInstance()->isMultiplayer())
+	{
+		_pingLabel = CCLabelTTF::create("Ping: 0 ms", "Arial", 10);
+		_pingLabel->setAnchorPoint(Vec2(0, 1));
+		_pingLabel->setPosition(Vec2(winWidth - 114, winHeight - 68));
+		_pingLabel->setColor(ccc3(0, 255, 0));
+		addChild(_pingLabel, 5002);
+
+		schedule(schedule_selector(HudLayer::updatePingDisplay), 1.0f);
+	}
 
 	_isInitPlayerHud = true;
 }
@@ -1432,4 +1443,28 @@ void HudLayer::resetSkillButtons()
 	skill3Button->reset();
 	skill4Button->reset();
 	skill5Button->reset();
+}
+void HudLayer::updatePingDisplay(float dt)
+{
+    auto lan = LanManager::getInstance();
+    if (!lan->isMultiplayer() || !_pingLabel)
+        return;
+
+    if (lan->isHost())
+    {
+        _pingLabel->setString("HOST (0 ms)");
+        _pingLabel->setColor(ccc3(0, 255, 0));
+        return;
+    }
+
+    lan->sendPing();
+    int ping = lan->getPingMs();
+    _pingLabel->setString(format("Ping: {} ms", ping).c_str());
+
+    if (ping < 80)
+        _pingLabel->setColor(ccc3(0, 255, 0));      // Hijau (Lancar)
+    else if (ping < 150)
+        _pingLabel->setColor(ccc3(255, 255, 0));    // Kuning (Sedang)
+    else
+        _pingLabel->setColor(ccc3(255, 60, 60));    // Merah (Lag)
 }
