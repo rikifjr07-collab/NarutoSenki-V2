@@ -32,6 +32,16 @@ struct NetHeroSync
 	int lastAttack = -1;
 	int attackSeq = 0;
 };
+struct NetFlogSync
+{
+	int group = 0; // 0 = Konoha, 1 = Akatsuki
+	int index = 0;
+	float x = 0.0f;
+	float y = 0.0f;
+	bool isFlipped = false;
+	int state = 0;
+	uint32_t hp = 0;
+};
 
 class LanManager
 {
