@@ -127,6 +127,8 @@ public:
 	void removeOugis();
 
 	bool _isAllButtonLocked;
+    CCLabelTTF *_pingLabel = nullptr;
+	void updatePingDisplay(float dt);
 
 	void addMapIcon();
 
