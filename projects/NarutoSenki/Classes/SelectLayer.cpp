@@ -8,6 +8,12 @@
 #include "../../../cocos2dx/platform/android/jni/JniHelper.h"
 #endif
 
+SelectLayer::SelectLayer()
+{
+    UserDefault::sharedUserDefault()->setStringForKey("net_cmd", "");
+    schedule(schedule_selector(SelectLayer::updateNetworkLobby), 0.15f);
+}
+
 SelectLayer::~SelectLayer()
 {
 	CC_SAFE_RELEASE(_selectList);
@@ -118,10 +124,9 @@ void SelectLayer::onExit()
 
 void SelectLayer::onEnter()
 {
-	Layer::onEnter();
-	setKeypadEnabled(true);
-	UserDefault::sharedUserDefault()->setStringForKey("net_cmd", "");
-	schedule(schedule_selector(SelectLayer::updateNetworkLobby), 0.15f);
+    Layer::onEnter();
+    setKeypadEnabled(true);
+    // schedule sudah dipindah ke constructor SelectLayer()
 }
 
 void SelectLayer::keyBackClicked()
