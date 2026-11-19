@@ -561,6 +561,16 @@ void GameLayer::initEffects()
 	shadowBatch = SpriteBatchNode::create("Effects/Shadows.png");
 	addChild(shadowBatch, kShadowOrder);
 }    
+void GameLayer::updateGameTime(float dt)
+{
+	_battleRuntimeSystem->updateGameTime(this);
+}
+
+void GameLayer::updateViewPoint(float dt)
+{
+	_battleRuntimeSystem->updateViewPoint(this);
+}
+
 void GameLayer::updateNetworkSync(float dt)
 {
 	auto lan = LanManager::getInstance();
