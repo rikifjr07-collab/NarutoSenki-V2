@@ -4,6 +4,9 @@
 
 class Mode3v3 : public IGameModeHandler
 {
+private:
+	string _mySelectedHeroName;
+
 public:
 	void init()
 	{
@@ -27,9 +30,13 @@ public:
 
 				if (slot.ownerId == myId)
 				{
+					_mySelectedHeroName = slot.heroName;
 					this->gd.playerGroup = grp;
 					this->playerGroup = grp;
-					selectLayer->_playerSelect = slot.heroName.c_str();
+					if (selectLayer)
+					{
+						selectLayer->_playerSelect = _mySelectedHeroName.c_str();
+					}
 				}
 
 				addHero(slot.heroName.c_str(), role, grp);
