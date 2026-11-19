@@ -454,7 +454,11 @@ void GameLayer::addFlog(float dt)
 		flog->setPosition(Vec2(13 * 32, flog->_mainPosY));
 		flog->setHPbar();
 		flog->idle();
-		flog->doAI();
+		if (!LanManager::getInstance()->isClient())
+{
+    flog->doAI();
+}
+
 		_KonohaFlogArray.push_back(flog);
 		addChild(flog, -int(flog->getPositionY()));
 	}
@@ -471,7 +475,11 @@ void GameLayer::addFlog(float dt)
 		flog->setPosition(Vec2(83 * 32, flog->_mainPosY));
 		flog->setHPbar();
 		flog->idle();
-		flog->doAI();
+		if (!LanManager::getInstance()->isClient())
+{
+    flog->doAI();
+}
+
 		_AkatsukiFlogArray.push_back(flog);
 		addChild(flog, -flog->getPositionY());
 	}
@@ -631,6 +639,21 @@ void GameLayer::updateNetworkSync(float dt)
 			snapshot.push_back(item);
 		}
 		lan->broadcastWorldState(snapshot);
+		vector<NetFlogSync> flogSnap;
+for (int idx = 0; idx < (int)_KonohaFlogArray.size(); idx++)
+{
+    auto f = _KonohaFlogArray[idx];
+    if (!f || f->getState() == State::DEAD) continue;
+    flogSnap.push_back({0, idx, f->getPositionX(), f->getPositionY(), f->_isFlipped, (int)f->getState(), f->getHP()});
+}
+for (int idx = 0; idx < (int)_AkatsukiFlogArray.size(); idx++)
+{
+    auto f = _AkatsukiFlogArray[idx];
+    if (!f || f->getState() == State::DEAD) continue;
+    flogSnap.push_back({1, idx, f->getPositionX(), f->getPositionY(), f->_isFlipped, (int)f->getState(), f->getHP()});
+}
+lan->broadcastFlogState(flogSnap);
+
 	}
 	else if (lan->isClient())
 	{
@@ -682,6 +705,45 @@ void GameLayer::updateNetworkSync(float dt)
 }
 
 			}
+			auto flogs = lan->getLatestFlogState();
+for (const auto &fs : flogs)
+{
+    auto &arr = (fs.group == 0) ? _KonohaFlogArray : _AkatsukiFlogArray;
+    if (fs.index >= 0 && fs.index < (int)arr.size())
+    {
+        auto f = arr[fs.index];
+        if (!f) continue;
+
+        if (fs.hp == 0 && f->getState() != State::DEAD)
+        {
+            f->setHPValue(0, false);
+            f->dead();
+            continue;
+        }
+
+        float oldX = f->getPositionX();
+        f->setPosition(Vec2(fs.x, fs.y));
+        f->_isFlipped = fs.isFlipped;
+        f->setFlipX(fs.isFlipped);
+        f->setZOrder(-fs.y);
+        f->setHPValue(fs.hp, false);
+
+        if (fs.state == (int)State::ATTACK && f->getState() != State::ATTACK)
+        {
+            f->attack(NAttack);
+        }
+        else if (fs.state == (int)State::WALK || std::abs(fs.x - oldX) > 0.5f)
+        {
+            if (f->getState() == State::IDLE)
+                f->walk(Vec2(fs.isFlipped ? -1.0f : 1.0f, 0.0f));
+        }
+        else if (fs.state == (int)State::IDLE && f->getState() == State::WALK)
+        {
+            f->idle();
+        }
+    }
+}
+
 		}
 	}
 }
