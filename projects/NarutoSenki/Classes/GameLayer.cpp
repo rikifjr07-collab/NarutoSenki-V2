@@ -691,7 +691,8 @@ lan->broadcastFlogState(flogSnap);
         hero->setHPValue(st.hp, false);
         // Jika di Host terkena hit/terpental atau posisi melenceng terlalu jauh (> 120px), tarik ke posisi Host
         if (st.state == (int)State::HURT || st.state == (int)State::FLOAT ||
-            hero->getPosition().distance(Vec2(st.x, st.y)) > 120.0f)
+            if (isHostCC || ccpDistance(hero->getPosition(), Vec2(st.x, st.y)) > 35.0f)
+
         {
             hero->setPosition(Vec2(st.x, st.y));
             hero->setZOrder(-st.y);
@@ -753,10 +754,11 @@ for (const auto &fs : flogs)
         f->setZOrder(-fs.y);
         f->setHPValue(fs.hp, false);
 
-        if (fs.state == (int)State::ATTACK && f->getState() != State::ATTACK)
-        {
-            f->attack(NAttack);
-        }
+        if (fs.state == (int)State::NATTACK && f->getState() != State::NATTACK)
+{
+    f->attack(NAttack);
+}
+
         else if (fs.state == (int)State::WALK || std::abs(fs.x - oldX) > 0.5f)
         {
             if (f->getState() == State::IDLE)
