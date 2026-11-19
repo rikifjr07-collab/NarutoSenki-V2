@@ -598,32 +598,34 @@ void GameLayer::updateNetworkSync(float dt)
 				{
 					Hero *targetHero = _CharacterArray[s];
 					if (targetHero && targetHero->getState() != State::DEAD)
-					{
-						if (inp.actionType == 99)
-						{
-							if (targetHero->getState() == State::WALK)
-								targetHero->idle();
-						}
-						else if (inp.actionType == -1)
-						{
-							targetHero->walk(Vec2(inp.dirX, inp.dirY));
-						}
-						else if (inp.actionType == (int)Item1)
-						{
-							targetHero->setItem(Item1);
-						}
-						else if (inp.actionType >= 0)
 {
-    if (inp.dirX != 0.0f)
+    if (inp.posX > 0.0f && inp.posY > 0.0f && targetHero->getState() != State::HURT && targetHero->getState() != State::FLOAT)
     {
-        bool flip = (inp.dirX < 0.0f);
-        targetHero->_isFlipped = flip;
-        targetHero->setFlipX(flip);
+        targetHero->setPosition(Vec2(inp.posX, inp.posY));
+        targetHero->setZOrder(-inp.posY);
     }
-    targetHero->attack((ABType)inp.actionType);
+    targetHero->_isFlipped = inp.isFlipped;
+    targetHero->setFlipX(inp.isFlipped);
+
+    if (inp.actionType == 99)
+    {
+        if (targetHero->getState() == State::WALK)
+            targetHero->idle();
+    }
+    else if (inp.actionType == -1)
+    {
+        targetHero->walk(Vec2(inp.dirX, inp.dirY));
+    }
+    else if (inp.actionType == (int)Item1)
+    {
+        targetHero->setItem(Item1);
+    }
+    else if (inp.actionType >= 0)
+    {
+        targetHero->attack((ABType)inp.actionType);
+    }
 }
 
-					}
 					break;
 				}
 			}
@@ -671,45 +673,61 @@ lan->broadcastFlogState(flogSnap);
 			{
 				if (hero && hero->getCharId() == st.charId)
 {
-	// 1. Sinkronkan status mati dan hidup kembali (respawn) dari Host
-	if (st.hp == 0 && hero->getState() != State::DEAD)
-	{
-		hero->setHPValue(0, false);
-		hero->dead();
-		break;
-	}
-	else if (st.hp > 0 && hero->getState() == State::DEAD)
-	{
-		hero->reborn(0);
-	}
+    // 1. Sinkronkan status mati & hidup kembali untuk SEMUA hero (termasuk diri sendiri)
+    if (st.hp == 0 && hero->getState() != State::DEAD)
+    {
+        hero->setHPValue(0, false);
+        hero->dead();
+        break;
+    }
+    else if (st.hp > 0 && hero->getState() == State::DEAD)
+    {
+        hero->reborn(0);
+    }
 
-	float oldX = hero->getPositionX();
-	float oldY = hero->getPositionY();
-	hero->setPosition(Vec2(st.x, st.y));
-	hero->_isFlipped = st.isFlipped;
-	hero->setFlipX(st.isFlipped);
-	hero->setZOrder(-st.y);
-	hero->setHPValue(st.hp, false);
+    // 2. Untuk karakter milik Client sendiri: bebaskan gerakan lokal!
+    if (hero == currentPlayer)
+    {
+        hero->setHPValue(st.hp, false);
+        // Jika di Host terkena hit/terpental atau posisi melenceng terlalu jauh (> 120px), tarik ke posisi Host
+        if (st.state == (int)State::HURT || st.state == (int)State::FLOAT ||
+            hero->getPosition().distance(Vec2(st.x, st.y)) > 120.0f)
+        {
+            hero->setPosition(Vec2(st.x, st.y));
+            hero->setZOrder(-st.y);
+        }
+        break;
+    }
 
-	if (st.attackSeq > hero->_netAttackSeq && st.lastAttack >= 0)
-	{
-		hero->_netAttackSeq = st.attackSeq;
-		if (st.lastAttack == (int)Item1)
-			hero->setItem(Item1);
-		else
-			hero->attack((ABType)st.lastAttack);
-	}
-	else if (st.state == (int)State::WALK || std::abs(st.x - oldX) > 0.5f || std::abs(st.y - oldY) > 0.5f)
-	{
-		if (hero->getState() == State::IDLE)
-			hero->walk(Vec2(st.isFlipped ? -1.0f : 1.0f, 0.0f));
-	}
-	else if (st.state == (int)State::IDLE && hero->getState() == State::WALK)
-	{
-		hero->idle();
-	}
-	break;
+    // 3. Untuk 5 hero lainnya (Host & Bot): ikuti penuh dari Host
+    float oldX = hero->getPositionX();
+    float oldY = hero->getPositionY();
+    hero->setPosition(Vec2(st.x, st.y));
+    hero->_isFlipped = st.isFlipped;
+    hero->setFlipX(st.isFlipped);
+    hero->setZOrder(-st.y);
+    hero->setHPValue(st.hp, false);
+
+    if (st.attackSeq > hero->_netAttackSeq && st.lastAttack >= 0)
+    {
+        hero->_netAttackSeq = st.attackSeq;
+        if (st.lastAttack == (int)Item1)
+            hero->setItem(Item1);
+        else
+            hero->attack((ABType)st.lastAttack);
+    }
+    else if (st.state == (int)State::WALK || std::abs(st.x - oldX) > 0.5f || std::abs(st.y - oldY) > 0.5f)
+    {
+        if (hero->getState() == State::IDLE)
+            hero->walk(Vec2(st.isFlipped ? -1.0f : 1.0f, 0.0f));
+    }
+    else if (st.state == (int)State::IDLE && hero->getState() == State::WALK)
+    {
+        hero->idle();
+    }
+    break;
 }
+
 
 			}
 			auto flogs = lan->getLatestFlogState();
@@ -863,52 +881,53 @@ void GameLayer::clearDoubleClick()
 
 void GameLayer::JoyStickRelease()
 {
-	if (LanManager::getInstance()->isClient())
-	{
-		LanManager::getInstance()->sendClientInput(0, 0, 99);
-	}
-	if (currentPlayer->getState() == State::WALK)
-	{
-		currentPlayer->idle();
-	}
+    if (currentPlayer && currentPlayer->getState() == State::WALK)
+    {
+        currentPlayer->idle();
+    }
+    if (LanManager::getInstance()->isClient() && currentPlayer)
+    {
+        LanManager::getInstance()->sendClientInput(
+            0, 0, 99, currentPlayer->getPositionX(), currentPlayer->getPositionY(), currentPlayer->_isFlipped);
+    }
 }
 
 void GameLayer::JoyStickUpdate(Vec2 direction)
 {
-	if (LanManager::getInstance()->isClient())
-	{
-		LanManager::getInstance()->sendClientInput(direction.x, direction.y, -1);
-	}
-	if (!ougisChar)
-	{
-		currentPlayer->walk(direction);
-	}
+    if (!ougisChar && currentPlayer)
+    {
+        currentPlayer->walk(direction);
+    }
+    if (LanManager::getInstance()->isClient() && currentPlayer)
+    {
+        LanManager::getInstance()->sendClientInput(
+            direction.x, direction.y, -1, currentPlayer->getPositionX(), currentPlayer->getPositionY(), currentPlayer->_isFlipped);
+    }
 }
 
 void GameLayer::attackButtonClick(ABType type)
 {
-	if (type == NAttack)
-	{
-		_isAttackButtonRelease = false;
-	}
+    if (type == NAttack)
+    {
+        _isAttackButtonRelease = false;
+    }
 
-	if (LanManager::getInstance()->isClient())
-{
-    float faceDir = (currentPlayer && currentPlayer->_isFlipped) ? -1.0f : 1.0f;
-    LanManager::getInstance()->sendClientInput(faceDir, 0, (int)type);
+    if (LanManager::getInstance()->isClient() && currentPlayer)
+    {
+        float faceDir = currentPlayer->_isFlipped ? -1.0f : 1.0f;
+        LanManager::getInstance()->sendClientInput(
+            faceDir, 0, (int)type, currentPlayer->getPositionX(), currentPlayer->getPositionY(), currentPlayer->_isFlipped);
+    }
+
+    if (type == Item1)
+    {
+        currentPlayer->setItem(type);
+    }
+    else
+    {
+        currentPlayer->attack(type);
+    }
 }
-
-
-	if (type == Item1)
-	{
-		currentPlayer->setItem(type);
-	}
-	else
-	{
-		currentPlayer->attack(type);
-	}
-}
-
 
 void GameLayer::gearButtonClick(GearType type)
 {
