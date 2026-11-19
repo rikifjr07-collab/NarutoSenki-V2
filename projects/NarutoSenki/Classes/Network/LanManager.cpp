@@ -440,16 +440,17 @@ void LanManager::hostStartGame()
 	_gameStarted = true;
 }
 
-void LanManager::sendClientInput(float dirX, float dirY, int actionType)
+void LanManager::sendClientInput(float dirX, float dirY, int actionType, float posX, float posY, bool isFlipped)
 {
-	if (!_isClient || _udpSocket < 0) return;
-	sockaddr_in dest{};
-	dest.sin_family = AF_INET;
-	dest.sin_port = htons(UDP_PORT);
-	inet_pton(AF_INET, _hostIp.c_str(), &dest.sin_addr);
+    if (!_isClient || _udpSocket < 0) return;
+    sockaddr_in dest{};
+    dest.sin_family = AF_INET;
+    dest.sin_port = htons(UDP_PORT);
+    inet_pton(AF_INET, _hostIp.c_str(), &dest.sin_addr);
 
-	string pkt = format("IN:{},{:.2f},{:.2f},{}", _myPlayerId, dirX, dirY, actionType);
-	sendto(_udpSocket, pkt.c_str(), pkt.size(), 0, (sockaddr *)&dest, sizeof(dest));
+    string pkt = format("IN:{},{:.2f},{:.2f},{},{:.1f},{:.1f},{}", 
+                        _myPlayerId, dirX, dirY, actionType, posX, posY, isFlipped ? 1 : 0);
+    sendto(_udpSocket, pkt.c_str(), pkt.size(), 0, (sockaddr *)&dest, sizeof(dest));
 }
 
 void LanManager::broadcastWorldState(const vector<NetHeroSync> &heroes)
@@ -488,12 +489,19 @@ void LanManager::udpReceiveLoop()
 		string pkt(buf);
 
 		if (_isHost && pkt.find("IN:") == 0)
-		{
-			NetPlayerInput inp{};
-			sscanf(pkt.c_str() + 3, "%d,%f,%f,%d", &inp.playerId, &inp.dirX, &inp.dirY, &inp.actionType);
-			std::lock_guard<std::mutex> lock(_dataMutex);
-			_pendingInputs.push_back(inp);
-		}
+{
+    NetPlayerInput inp{};
+    int flip = 0;
+    int parsed = sscanf(pkt.c_str() + 3, "%d,%f,%f,%d,%f,%f,%d", 
+                        &inp.playerId, &inp.dirX, &inp.dirY, &inp.actionType, &inp.posX, &inp.posY, &flip);
+    if (parsed >= 4)
+    {
+        inp.isFlipped = (flip == 1);
+        std::lock_guard<std::mutex> lock(_dataMutex);
+        _pendingInputs.push_back(inp);
+    }
+}
+
 		else if (_isHost && pkt.find("PING:") == 0)
 {
     string reply = "PONG:" + pkt.substr(5);
