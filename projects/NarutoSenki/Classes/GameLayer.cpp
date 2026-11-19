@@ -560,17 +560,7 @@ void GameLayer::initEffects()
 	addSprites("Effects/Shadows.plist");
 	shadowBatch = SpriteBatchNode::create("Effects/Shadows.png");
 	addChild(shadowBatch, kShadowOrder);
-}
-
-void GameLayer::updateGameTime(float dt)
-{
-	_battleRuntimeSystem->updateGameTime(this);
-}
-
-void GameLayer::updateViewPoint(float dt)
-{
-	_battleRuntimeSystem->updateViewPoint(this);
-}
+}    
 void GameLayer::updateNetworkSync(float dt)
 {
 	auto lan = LanManager::getInstance();
@@ -598,39 +588,39 @@ void GameLayer::updateNetworkSync(float dt)
 				{
 					Hero *targetHero = _CharacterArray[s];
 					if (targetHero && targetHero->getState() != State::DEAD)
-{
-    if (inp.posX > 0.0f && inp.posY > 0.0f && targetHero->getState() != State::HURT && targetHero->getState() != State::FLOAT)
-    {
-        targetHero->setPosition(Vec2(inp.posX, inp.posY));
-        targetHero->setZOrder(-inp.posY);
-    }
-    targetHero->_isFlipped = inp.isFlipped;
-    targetHero->setFlipX(inp.isFlipped);
+					{
+						if (inp.posX > 0.0f && inp.posY > 0.0f && targetHero->getState() != State::HURT && targetHero->getState() != State::FLOAT)
+						{
+							targetHero->setPosition(Vec2(inp.posX, inp.posY));
+							targetHero->setZOrder(-inp.posY);
+						}
+						targetHero->_isFlipped = inp.isFlipped;
+						targetHero->setFlipX(inp.isFlipped);
 
-    if (inp.actionType == 99)
-    {
-        if (targetHero->getState() == State::WALK)
-            targetHero->idle();
-    }
-    else if (inp.actionType == -1)
-    {
-        targetHero->walk(Vec2(inp.dirX, inp.dirY));
-    }
-    else if (inp.actionType == (int)Item1)
-    {
-        targetHero->setItem(Item1);
-    }
-    else if (inp.actionType >= 0)
-    {
-        targetHero->attack((ABType)inp.actionType);
-    }
-}
-
+						if (inp.actionType == 99)
+						{
+							if (targetHero->getState() == State::WALK)
+								targetHero->idle();
+						}
+						else if (inp.actionType == -1)
+						{
+							targetHero->walk(Vec2(inp.dirX, inp.dirY));
+						}
+						else if (inp.actionType == (int)Item1)
+						{
+							targetHero->setItem(Item1);
+						}
+						else if (inp.actionType >= 0)
+						{
+							targetHero->attack((ABType)inp.actionType);
+						}
+					}
 					break;
 				}
 			}
 		}
 
+		// 1. Kirim status 6 Hero
 		vector<NetHeroSync> snapshot;
 		for (auto hero : _CharacterArray)
 		{
@@ -648,133 +638,162 @@ void GameLayer::updateNetworkSync(float dt)
 			snapshot.push_back(item);
 		}
 		lan->broadcastWorldState(snapshot);
-		vector<NetFlogSync> flogSnap;
-for (int idx = 0; idx < (int)_KonohaFlogArray.size(); idx++)
-{
-    auto f = _KonohaFlogArray[idx];
-    if (!f || f->getState() == State::DEAD) continue;
-    flogSnap.push_back({0, idx, f->getPositionX(), f->getPositionY(), f->_isFlipped, (int)f->getState(), f->getHP()});
-}
-for (int idx = 0; idx < (int)_AkatsukiFlogArray.size(); idx++)
-{
-    auto f = _AkatsukiFlogArray[idx];
-    if (!f || f->getState() == State::DEAD) continue;
-    flogSnap.push_back({1, idx, f->getPositionX(), f->getPositionY(), f->_isFlipped, (int)f->getState(), f->getHP()});
-}
-lan->broadcastFlogState(flogSnap);
 
+		// 2. Kirim status Minion (Flog)
+		vector<NetFlogSync> flogSnap;
+		for (int idx = 0; idx < (int)_KonohaFlogArray.size(); idx++)
+		{
+			auto f = _KonohaFlogArray[idx];
+			if (!f || f->getState() == State::DEAD) continue;
+			flogSnap.push_back({0, idx, f->getPositionX(), f->getPositionY(), f->_isFlipped, (int)f->getState(), f->getHP()});
+		}
+		for (int idx = 0; idx < (int)_AkatsukiFlogArray.size(); idx++)
+		{
+			auto f = _AkatsukiFlogArray[idx];
+			if (!f || f->getState() == State::DEAD) continue;
+			flogSnap.push_back({1, idx, f->getPositionX(), f->getPositionY(), f->_isFlipped, (int)f->getState(), f->getHP()});
+		}
+		lan->broadcastFlogState(flogSnap);
+
+		// 3. Kirim status Tower
+		vector<NetTowerSync> towerSnap;
+		for (auto tower : _TowerArray)
+		{
+			if (!tower) continue;
+			towerSnap.push_back({tower->getCharId(), tower->getHP(), tower->getMaxHP()});
+		}
+		lan->broadcastTowerState(towerSnap);
 	}
 	else if (lan->isClient())
 	{
+		// 1. Terima status 6 Hero
 		auto states = lan->getLatestWorldState();
 		for (const auto &st : states)
 		{
 			for (auto hero : _CharacterArray)
 			{
 				if (hero && hero->getCharId() == st.charId)
-{
-    // 1. Sinkronkan status mati & hidup kembali untuk SEMUA hero (termasuk diri sendiri)
-    if (st.hp == 0 && hero->getState() != State::DEAD)
-    {
-        hero->setHPValue(0, false);
-        hero->dead();
-        break;
-    }
-    else if (st.hp > 0 && hero->getState() == State::DEAD)
-    {
-        hero->reborn(0);
-    }
+				{
+					if (st.hp == 0 && hero->getState() != State::DEAD)
+					{
+						hero->setHPValue(0, false);
+						hero->dead();
+						break;
+					}
+					else if (st.hp > 0 && hero->getState() == State::DEAD)
+					{
+						hero->reborn(0);
+					}
 
-    // 2. Untuk karakter milik Client sendiri: bebaskan gerakan lokal!
-    if (hero == currentPlayer)
-    {
-        hero->setHPValue(st.hp, false);
-        // Jika di Host terkena hit/terpental atau posisi melenceng terlalu jauh (> 120px), tarik ke posisi Host
-        if (st.state == (int)State::HURT || st.state == (int)State::FLOAT ||
-            if (isHostCC || ccpDistance(hero->getPosition(), Vec2(st.x, st.y)) > 35.0f)
+					if (hero == currentPlayer)
+					{
+						hero->setHPValue(st.hp, false);
+						bool isHostCC = (st.state == (int)State::HURT || st.state == (int)State::FLOAT);
+						if (isHostCC || ccpDistance(hero->getPosition(), Vec2(st.x, st.y)) > 35.0f)
+						{
+							hero->setPosition(Vec2(st.x, st.y));
+							hero->setZOrder(-st.y);
+							if (isHostCC && hero->getState() != (State)st.state)
+							{
+								hero->idle();
+							}
+						}
+						break;
+					}
 
-        {
-            hero->setPosition(Vec2(st.x, st.y));
-            hero->setZOrder(-st.y);
-        }
-        break;
-    }
+					float oldX = hero->getPositionX();
+					float oldY = hero->getPositionY();
+					hero->setPosition(Vec2(st.x, st.y));
+					hero->_isFlipped = st.isFlipped;
+					hero->setFlipX(st.isFlipped);
+					hero->setZOrder(-st.y);
+					hero->setHPValue(st.hp, false);
 
-    // 3. Untuk 5 hero lainnya (Host & Bot): ikuti penuh dari Host
-    float oldX = hero->getPositionX();
-    float oldY = hero->getPositionY();
-    hero->setPosition(Vec2(st.x, st.y));
-    hero->_isFlipped = st.isFlipped;
-    hero->setFlipX(st.isFlipped);
-    hero->setZOrder(-st.y);
-    hero->setHPValue(st.hp, false);
-
-    if (st.attackSeq > hero->_netAttackSeq && st.lastAttack >= 0)
-    {
-        hero->_netAttackSeq = st.attackSeq;
-        if (st.lastAttack == (int)Item1)
-            hero->setItem(Item1);
-        else
-            hero->attack((ABType)st.lastAttack);
-    }
-    else if (st.state == (int)State::WALK || std::abs(st.x - oldX) > 0.5f || std::abs(st.y - oldY) > 0.5f)
-    {
-        if (hero->getState() == State::IDLE)
-            hero->walk(Vec2(st.isFlipped ? -1.0f : 1.0f, 0.0f));
-    }
-    else if (st.state == (int)State::IDLE && hero->getState() == State::WALK)
-    {
-        hero->idle();
-    }
-    break;
-}
-
-
+					if (st.attackSeq > hero->_netAttackSeq && st.lastAttack >= 0)
+					{
+						hero->_netAttackSeq = st.attackSeq;
+						if (st.lastAttack == (int)Item1)
+							hero->setItem(Item1);
+						else
+							hero->attack((ABType)st.lastAttack);
+					}
+					else if (st.state == (int)State::WALK || std::abs(st.x - oldX) > 0.5f || std::abs(st.y - oldY) > 0.5f)
+					{
+						if (hero->getState() == State::IDLE)
+							hero->walk(Vec2(st.isFlipped ? -1.0f : 1.0f, 0.0f));
+					}
+					else if (st.state == (int)State::IDLE && hero->getState() == State::WALK)
+					{
+						hero->idle();
+					}
+					break;
+				}
 			}
-			auto flogs = lan->getLatestFlogState();
-for (const auto &fs : flogs)
-{
-    auto &arr = (fs.group == 0) ? _KonohaFlogArray : _AkatsukiFlogArray;
-    if (fs.index >= 0 && fs.index < (int)arr.size())
-    {
-        auto f = arr[fs.index];
-        if (!f) continue;
+		}
 
-        if (fs.hp == 0 && f->getState() != State::DEAD)
-        {
-            f->setHPValue(0, false);
-            f->dead();
-            continue;
-        }
+		// 2. Terima status Minion (Flog)
+		auto flogs = lan->getLatestFlogState();
+		for (const auto &fs : flogs)
+		{
+			auto &arr = (fs.group == 0) ? _KonohaFlogArray : _AkatsukiFlogArray;
+			if (fs.index >= 0 && fs.index < (int)arr.size())
+			{
+				auto f = arr[fs.index];
+				if (!f) continue;
 
-        float oldX = f->getPositionX();
-        f->setPosition(Vec2(fs.x, fs.y));
-        f->_isFlipped = fs.isFlipped;
-        f->setFlipX(fs.isFlipped);
-        f->setZOrder(-fs.y);
-        f->setHPValue(fs.hp, false);
+				if (fs.hp == 0 && f->getState() != State::DEAD)
+				{
+					f->setHPValue(0, false);
+					f->dead();
+					continue;
+				}
 
-        if (fs.state == (int)State::NATTACK && f->getState() != State::NATTACK)
-{
-    f->attack(NAttack);
-}
+				float oldX = f->getPositionX();
+				f->setPosition(Vec2(fs.x, fs.y));
+				f->_isFlipped = fs.isFlipped;
+				f->setFlipX(fs.isFlipped);
+				f->setZOrder(-fs.y);
+				f->setHPValue(fs.hp, false);
 
-        else if (fs.state == (int)State::WALK || std::abs(fs.x - oldX) > 0.5f)
-        {
-            if (f->getState() == State::IDLE)
-                f->walk(Vec2(fs.isFlipped ? -1.0f : 1.0f, 0.0f));
-        }
-        else if (fs.state == (int)State::IDLE && f->getState() == State::WALK)
-        {
-            f->idle();
-        }
-    }
-}
+				if (fs.state == (int)State::NATTACK && f->getState() != State::NATTACK)
+				{
+					f->attack(NAttack);
+				}
+				else if (fs.state == (int)State::WALK || std::abs(fs.x - oldX) > 0.5f)
+				{
+					if (f->getState() == State::IDLE)
+						f->walk(Vec2(fs.isFlipped ? -1.0f : 1.0f, 0.0f));
+				}
+				else if (fs.state == (int)State::IDLE && f->getState() == State::WALK)
+				{
+					f->idle();
+				}
+			}
+		}
 
+		// 3. Terima status Tower
+		auto towers = lan->getLatestTowerState();
+		for (const auto &tw : towers)
+		{
+			for (auto tower : _TowerArray)
+			{
+				if (tower && tower->getCharId() == tw.charId)
+				{
+					if (tw.hp == 0 && tower->getHP() > 0)
+					{
+						tower->setHPValue(0, false);
+						tower->dead();
+					}
+					else if (tw.hp > 0)
+					{
+						tower->setHPValue(tw.hp, false);
+					}
+					break;
+				}
+			}
 		}
 	}
 }
-
 
 void GameLayer::setTowerState(int charId)
 {
