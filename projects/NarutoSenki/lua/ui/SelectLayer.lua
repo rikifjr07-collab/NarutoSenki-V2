@@ -389,6 +389,30 @@ function SelectLayer:setSelected(btn)
                                             btn:getPositionY() - 2))
     end
 
+    local ud = CCUserDefault:sharedUserDefault()
+    local myId = ud:getIntegerForKey('net_my_id')
+
+    if myId and myId > 0 then
+        self.selectHero = btn._charName
+        if btn._clickTime >= 2 then
+            self:setSelectHero(btn._charName)
+            self._playerSelect = self.selectHero
+            ud:setStringForKey('net_cmd', 'HERO:' .. btn._charName)
+        end
+
+        if self._heroHalfImage then self._heroHalfImage:removeFromParent() end
+        local charName = '#' .. btn._charName
+        self._heroHalfImage = display.newSprite(charName .. '_half.png', 10, 10)
+        self._heroHalfImage:setAnchorPoint(CCPoint(0, 0))
+        self:addChild(self._heroHalfImage, 1)
+
+        if self._heroName then self._heroName:removeFromParent() end
+        self._heroName = display.newSprite(charName .. '_font.png', 100, 20)
+        self._heroName:setAnchorPoint(CCPoint(0.5, 0))
+        self:addChild(self._heroName, 5)
+        return
+    end
+
     if not self.enableCustomSelect and self._playerSelect then return end
 
     self.selectHero = btn._charName
@@ -400,7 +424,7 @@ function SelectLayer:setSelected(btn)
         if btn._clickTime >= 2 then
             self:setSelectHero(btn._charName)
             self._playerSelect = self.selectHero
-            CCUserDefault:sharedUserDefault():setStringForKey('net_cmd', 'HERO:' .. btn._charName)
+            ud:setStringForKey('net_cmd', 'HERO:' .. btn._charName)
 
             if not self.enableCustomSelect then
                 self._selectImg:removeFromParent()
@@ -456,7 +480,6 @@ function SelectLayer:setSelected(btn)
         if btn._clickTime >= 2 then
             self._com3Select = self.selectHero
             self:setCom3Select(self._com3Select)
-            
 
             self._comLabel3:stopAllActions()
             self._comLabel3:setOpacity(255)
@@ -470,6 +493,12 @@ function SelectLayer:setSelected(btn)
 end
 
 function SelectLayer:noComSelect()
+    local ud = CCUserDefault:sharedUserDefault()
+    local myId = ud:getIntegerForKey('net_my_id')
+    if myId and myId > 0 then
+        return true
+    end
+
     if self.is4v4Mode then
         return self._com3Select
     elseif self.is3v3Mode then
@@ -524,15 +553,12 @@ function SelectLayer:initMultiplayerUI()
     joinBtn:setPosition(width - 90, height - 18)
     self:addChild(netMenu, 120)
 
-    -- Wadah 6 Slot Tim di Z-Order tinggi (110) agar selalu terlihat & bisa disentuh
     self._mpSlotLayer = display.newLayer()
     self._mpSlotLayer:setVisible(false)
     self:addChild(self._mpSlotLayer, 110)
 
-    local panelBg = CCScale9Sprite:createWithSpriteFrameName('team_bg.png')
-    panelBg:setContentSize(CCSizeMake(135, 108))
-    panelBg:setAnchorPoint(CCPoint(0, 0))
-    panelBg:setPosition(6, 128)
+    local panelBg = CCLayerColor:create(ccc4(0, 0, 0, 180), 145, 115)
+    panelBg:setPosition(6, 125)
     self._mpSlotLayer:addChild(panelBg, 1)
 
     self._slotIcons = {}
@@ -543,22 +569,21 @@ function SelectLayer:initMultiplayerUI()
         local slotIndex = i
         local isEnemySide = (i >= 3)
         local col = i % 3
-        local posX = 12 + col * 42
-        local posY = isEnemySide and 144 or 194
+        local posX = 14 + col * 44
+        local posY = isEnemySide and 142 or 194
 
         local icon = display.newSprite('#unknow_select.png', posX, posY)
         icon:setAnchorPoint(CCPoint(0, 0))
         self._mpSlotLayer:addChild(icon, 3)
         self._slotIcons[i] = icon
 
-        -- Gunakan area sentuh tombol transparan seukuran kotak ikon agar pasti merespons sentuhan
         local touchLabel = CCLabelTTF:create('     ', 'Arial', 26)
         local slotBtn = CCMenuItemLabel:create(touchLabel)
         slotBtn:setAnchorPoint(CCPoint(0, 0))
         slotBtn:setPosition(posX, posY)
         slotBtn:registerScriptTapHandler(function()
-            local myId = ud:getIntegerForKey('net_my_id', 0)
-            if myId > 0 then
+            local myId = ud:getIntegerForKey('net_my_id')
+            if myId and myId > 0 then
                 ud:setStringForKey('net_cmd', 'MOVE:' .. tostring(slotIndex))
                 audio.playSound('Audio/Menu/select.ogg')
             end
@@ -584,14 +609,18 @@ end
 
 function SelectLayer:refreshMultiplayerSlots()
     local ud = CCUserDefault:sharedUserDefault()
-    local status = ud:getStringForKey('net_status', 'Status: Offline (3v3)')
-    local myId = ud:getIntegerForKey('net_my_id', 0)
+    local status = ud:getStringForKey('net_status')
+    local myId = ud:getIntegerForKey('net_my_id')
 
     if self._netStatusLabel then
-        self._netStatusLabel:setString(status)
+        if status and status ~= '' then
+            self._netStatusLabel:setString(status)
+        else
+            self._netStatusLabel:setString('Status: Offline (3v3)')
+        end
     end
 
-    if myId == 0 then
+    if not myId or myId == 0 then
         if self._mpSlotLayer then self._mpSlotLayer:setVisible(false) end
         if self._teamSelector then self._teamSelector:setVisible(true) end
         return
@@ -601,8 +630,8 @@ function SelectLayer:refreshMultiplayerSlots()
     if self._teamSelector then self._teamSelector:setVisible(false) end
 
     for i = 0, 5 do
-        local owner = ud:getIntegerForKey('net_slot_owner_' .. tostring(i), 0)
-        local hero = ud:getStringForKey('net_slot_hero_' .. tostring(i), '')
+        local owner = ud:getIntegerForKey('net_slot_owner_' .. tostring(i)) or 0
+        local hero = ud:getStringForKey('net_slot_hero_' .. tostring(i)) or ''
         local sideTag = (i >= 3) and 'AKA ' or 'KON '
 
         if owner == 0 then
@@ -639,3 +668,4 @@ function backToStartMenu()
     menuScene:addChild(menuLayer)
     director.replaceSceneWithFade(menuScene, 1)
 end
+
