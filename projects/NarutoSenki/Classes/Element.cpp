@@ -307,11 +307,14 @@ void Monster::dealloc()
 
 	if (getName() == SkillEnum::FutonSRK || getName() == SkillEnum::FutonSRK2)
 	{
+		if (_master)
+			_master->removeMon(this);
 		auto call = CallFunc::create(std::bind(&Monster::removeFromParent, this));
 		auto seq = newSequence(getDeadAction(), call);
 		runAction(seq);
 		return;
 	}
+
 	if (getName() == SkillEnum::HiraishinMark)
 	{
 		_master->_isCanSkill1 = false;
