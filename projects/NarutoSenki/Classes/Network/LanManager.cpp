@@ -567,6 +567,31 @@ else if (_isClient && pkt.find("TW:") == 0)
 	std::lock_guard<std::mutex> lock(_dataMutex);
 	_latestTowerState = list;
 }
+    else if (_isClient && pkt.find("MN:") == 0)
+{
+    vector<NetMonsterSync> list;
+    string body = pkt.substr(3);
+    if (!body.empty())
+    {
+        std::stringstream ss(body);
+        string seg;
+        while (std::getline(ss, seg, ';'))
+        {
+            NetMonsterSync m{};
+            char nameBuf[64] = {0};
+            int flip = 0;
+            if (sscanf(seg.c_str(), "%d,%d,%63[^,],%f,%f,%d,%d,%u,%u",
+                       &m.masterCharId, &m.monIndex, nameBuf, &m.x, &m.y, &flip, &m.state, &m.hp, &m.maxHp) == 9)
+            {
+                m.name = nameBuf;
+                m.isFlipped = (flip == 1);
+                list.push_back(m);
+            }
+        }
+    }
+    std::lock_guard<std::mutex> lock(_dataMutex);
+    _latestMonsterState = list;
+}
 
 	}
 }
@@ -679,4 +704,32 @@ vector<NetTowerSync> LanManager::getLatestTowerState()
 {
 	std::lock_guard<std::mutex> lock(_dataMutex);
 	return _latestTowerState;
+}
+void LanManager::broadcastMonsterState(const vector<NetMonsterSync> &mons)
+{
+    if (!_isHost || _udpSocket < 0) return;
+    string pkt = "MN:";
+    for (size_t i = 0; i < mons.size(); i++)
+    {
+        const auto &m = mons[i];
+        pkt += format("{},{},{},{:.0f},{:.0f},{},{},{},{}",
+                      m.masterCharId, m.monIndex, m.name, m.x, m.y, m.isFlipped ? 1 : 0, m.state, m.hp, m.maxHp);
+        if (i + 1 < mons.size()) pkt += ";";
+    }
+
+    std::lock_guard<std::mutex> lock(_dataMutex);
+    for (const auto &ip : _clientIps)
+    {
+        sockaddr_in dest{};
+        dest.sin_family = AF_INET;
+        dest.sin_port = htons(UDP_PORT + 1);
+        inet_pton(AF_INET, ip.c_str(), &dest.sin_addr);
+        sendto(_udpSocket, pkt.c_str(), pkt.size(), 0, (sockaddr *)&dest, sizeof(dest));
+    }
+}
+
+vector<NetMonsterSync> LanManager::getLatestMonsterState()
+{
+    std::lock_guard<std::mutex> lock(_dataMutex);
+    return _latestMonsterState;
 }
