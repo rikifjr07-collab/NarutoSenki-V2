@@ -673,6 +673,25 @@ void GameLayer::updateNetworkSync(float dt)
 			towerSnap.push_back({tower->getCharId(), tower->getHP(), tower->getMaxHP()});
 		}
 		lan->broadcastTowerState(towerSnap);
+				// 4. Terima status Summon, Boneka, Serangga & Rasenshuriken
+				// 4. Kirim status Summon, Boneka, Serangga & Rasenshuriken
+		vector<NetMonsterSync> monSnap;
+		for (auto hero : _CharacterArray)
+		{
+			if (!hero) continue;
+			auto &mArr = hero->getMonsterArray();
+			for (int mIdx = 0; mIdx < (int)mArr.size(); mIdx++)
+			{
+				auto mo = mArr[mIdx];
+				if (!mo || mo->getState() == State::DEAD) continue;
+				monSnap.push_back({hero->getCharId(), mIdx, mo->getName(),
+								   mo->getPositionX(), mo->getPositionY(),
+								   mo->_isFlipped, (int)mo->getState(), mo->getHP(), mo->getMaxHP()});
+			}
+		}
+		lan->broadcastMonsterState(monSnap);
+
+
 	}
 	else if (lan->isClient())
 	{
@@ -802,6 +821,55 @@ void GameLayer::updateNetworkSync(float dt)
 				}
 			}
 		}
+				// 4. Terima status Summon, Boneka, Serangga & Rasenshuriken
+		auto mons = lan->getLatestMonsterState();
+		for (const auto &ms : mons)
+		{
+			for (auto hero : _CharacterArray)
+			{
+				if (hero && hero->getCharId() == ms.masterCharId)
+				{
+					auto &mArr = hero->getMonsterArray();
+					if (ms.monIndex >= 0 && ms.monIndex < (int)mArr.size())
+					{
+						auto mo = mArr[ms.monIndex];
+						if (!mo) break;
+
+						if (ms.hp == 0 && ms.maxHp > 0 && mo->getState() != State::DEAD)
+						{
+							mo->setHPValue(0, false);
+							mo->dead();
+							break;
+						}
+
+						float oldX = mo->getPositionX();
+						float oldY = mo->getPositionY();
+						mo->setPosition(Vec2(ms.x, ms.y));
+						mo->_isFlipped = ms.isFlipped;
+						mo->setFlipX(ms.isFlipped);
+						mo->setZOrder(-ms.y);
+						if (ms.maxHp > 0)
+							mo->setHPValue(ms.hp, false);
+
+						if (ms.state == (int)State::NATTACK && mo->getState() != State::NATTACK)
+						{
+							mo->attack(NAttack);
+						}
+						else if (ms.state == (int)State::WALK || std::abs(ms.x - oldX) > 0.5f || std::abs(ms.y - oldY) > 0.5f)
+						{
+							if (mo->getState() == State::IDLE)
+								mo->walk(Vec2(ms.isFlipped ? -1.0f : 1.0f, 0.0f));
+						}
+						else if (ms.state == (int)State::IDLE && mo->getState() == State::WALK)
+						{
+							mo->idle();
+						}
+					}
+					break;
+				}
+			}
+		}
+
 	}
 }
 
