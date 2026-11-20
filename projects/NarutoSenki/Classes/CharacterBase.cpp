@@ -3267,10 +3267,11 @@ void CharacterBase::setMon(const string &monName)
 		monster->attack(NAttack);
 		monster->setDirectMove(128, 2.0f, false);
 	}
-	else if (monName == "FutonSRK2" ||
+		else if (monName == "FutonSRK2" ||
 			 monName == "FutonSRK")
 	{
 		monster->setPosition(Vec2(getPositionX() + (_isFlipped == true ? -48 : 48), getPositionY()));
+		_monsterArray.push_back(monster);
 
 		monster->attack(NAttack);
 		bool isFollow = false;
@@ -3287,7 +3288,7 @@ void CharacterBase::setMon(const string &monName)
 			}
 		}
 
-		if (isFollow)
+		if (isFollow && !LanManager::getInstance()->isClient())
 		{
 			monster->_mainTarget = _mainTarget;
 			monster->doAI();
@@ -3302,6 +3303,7 @@ void CharacterBase::setMon(const string &monName)
 			monster->walk(moveDirection);
 		}
 	}
+
 	else if (monName == "Kubi")
 	{
 		monster->attack(NAttack);
