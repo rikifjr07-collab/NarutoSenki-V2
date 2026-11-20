@@ -51,6 +51,18 @@ struct NetTowerSync
 	uint32_t hp = 0;
 	uint32_t maxHp = 0;
 };
+struct NetMonsterSync
+{
+    int masterCharId = 0;
+    int monIndex = 0;
+    string name;
+    float x = 0.0f;
+    float y = 0.0f;
+    bool isFlipped = false;
+    int state = 0;
+    uint32_t hp = 0;
+    uint32_t maxHp = 0;
+};
 
 class LanManager
 {
@@ -88,6 +100,8 @@ public:
     vector<NetFlogSync> getLatestFlogState();
     void broadcastTowerState(const vector<NetTowerSync> &towers);
     vector<NetTowerSync> getLatestTowerState();
+    void broadcastMonsterState(const vector<NetMonsterSync> &mons);
+    vector<NetMonsterSync> getLatestMonsterState();
     void notifySurrender(int myGroup);
     void broadcastGameOver(int winnerGroup);
     int getNetworkWinnerGroup() const { return _winnerGroup; }
@@ -125,5 +139,6 @@ private:
 	vector<NetHeroSync> _latestWorldState;
     vector<NetFlogSync> _latestFlogState;
     vector<NetTowerSync> _latestTowerState;
+    vector<NetMonsterSync> _latestMonsterState;
 };
 
