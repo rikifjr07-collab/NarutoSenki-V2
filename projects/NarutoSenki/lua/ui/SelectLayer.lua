@@ -392,13 +392,13 @@ function SelectLayer:setSelected(btn)
     local ud = CCUserDefault:sharedUserDefault()
     local myId = ud:getIntegerForKey('net_my_id')
 
+    -- MODE MULTIPLAYER LAN: Klik 1x atau 2x langsung mengirim pilihan karakter ke slot!
     if myId and myId > 0 then
         self.selectHero = btn._charName
-        if btn._clickTime >= 2 then
-            self:setSelectHero(btn._charName)
-            self._playerSelect = self.selectHero
-            ud:setStringForKey('net_cmd', 'HERO:' .. btn._charName)
-        end
+        self._playerSelect = btn._charName
+        self:setSelectHero(btn._charName)
+        ud:setStringForKey('net_cmd', 'HERO:' .. btn._charName)
+        audio.playSound('Audio/Menu/select.ogg')
 
         if self._heroHalfImage then self._heroHalfImage:removeFromParent() end
         local charName = '#' .. btn._charName
@@ -496,7 +496,7 @@ function SelectLayer:noComSelect()
     local ud = CCUserDefault:sharedUserDefault()
     local myId = ud:getIntegerForKey('net_my_id')
     if myId and myId > 0 then
-        return true
+        return false
     end
 
     if self.is4v4Mode then
@@ -507,6 +507,7 @@ function SelectLayer:noComSelect()
         return self._playerSelect
     end
 end
+
 function SelectLayer:initMultiplayerUI()
     if not self.is3v3Mode then return end
 
