@@ -76,7 +76,7 @@ void LanManager::disconnect()
 		if (fd >= 0) close(fd);
 	_clientSockets.clear();
 	_clientIps.clear();
-
+    
 	for (int i = 0; i < 6; i++)
 	{
 		_slots[i].ownerId = 0;
@@ -311,6 +311,22 @@ void LanManager::clientReceiveLoop()
 			else if (line.find("OVER:") == 0)
 {
 	_winnerGroup = atoi(line.substr(5).c_str());
+}
+            else if (line.find("KILL:") == 0)
+{
+    char kBuf[64] = {0};
+    char dBuf[64] = {0};
+    int streak = 1, kKills = 0, aKills = 0;
+    if (sscanf(line.c_str() + 5, "%63[^,],%63[^,],%d,%d,%d", kBuf, dBuf, &streak, &kKills, &aKills) == 5)
+    {
+        std::lock_guard<std::mutex> lock(_dataMutex);
+        _lastKillerName = kBuf;
+        _lastDeadName = dBuf;
+        _lastKillStreak = streak;
+        _konohaKills = kKills;
+        _akatsukiKills = aKills;
+        _hasNewKillReport = true;
+    }
 }
 
 		}
@@ -732,4 +748,39 @@ vector<NetMonsterSync> LanManager::getLatestMonsterState()
 {
     std::lock_guard<std::mutex> lock(_dataMutex);
     return _latestMonsterState;
+}
+void LanManager::broadcastKillEvent(const string &killerName, const string &deadName, int killNum, int konohaKills, int akatsukiKills)
+{
+    {
+        std::lock_guard<std::mutex> lock(_dataMutex);
+        _konohaKills = konohaKills;
+        _akatsukiKills = akatsukiKills;
+    }
+    if (!_isHost) return;
+
+    string msg = format("KILL:{},{},{},{},{}\n", killerName, deadName, killNum, konohaKills, akatsukiKills);
+    std::lock_guard<std::mutex> lock(_dataMutex);
+    for (int fd : _clientSockets)
+    {
+        if (fd >= 0)
+            send(fd, msg.c_str(), msg.size(), 0);
+    }
+}
+
+bool LanManager::popKillEvent(string &killerName, string &deadName, int &killNum)
+{
+    std::lock_guard<std::mutex> lock(_dataMutex);
+    if (!_hasNewKillReport) return false;
+    killerName = _lastKillerName;
+    deadName = _lastDeadName;
+    killNum = _lastKillStreak;
+    _hasNewKillReport = false;
+    return true;
+}
+
+void LanManager::getTeamKills(int &konohaKills, int &akatsukiKills)
+{
+    std::lock_guard<std::mutex> lock(_dataMutex);
+    konohaKills = _konohaKills;
+    akatsukiKills = _akatsukiKills;
 }
