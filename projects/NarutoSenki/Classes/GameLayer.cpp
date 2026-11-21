@@ -484,10 +484,14 @@ void GameLayer::addFlog(float dt)
 		flog->setPosition(Vec2(83 * 32, flog->_mainPosY));
 		flog->setHPbar();
 		flog->idle();
-		if (!LanManager::getInstance()->isClient())
-{
-    flog->doAI();
-}
+				if (!LanManager::getInstance()->isClient())
+		{
+			flog->doAI();
+		}
+		else
+		{
+			flog->setWalkSpeed(0);
+		}
 
 		_AkatsukiFlogArray.push_back(flog);
 		addChild(flog, -flog->getPositionY());
