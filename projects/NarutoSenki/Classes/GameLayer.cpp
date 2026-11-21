@@ -824,10 +824,10 @@ void GameLayer::updateNetworkSync(float dt)
 			lan->getTeamKills(kKills, aKills);
 			if (_hudLayer)
 			{
-				if (_hudLayer->kCountLabel)
-					_hudLayer->kCountLabel->setString(to_cstr(kKills));
-				if (_hudLayer->aCountLabel)
-					_hudLayer->aCountLabel->setString(to_cstr(aKills));
+				if (_hudLayer->KonoLabel)
+					_hudLayer->KonoLabel->setString(to_cstr(kKills));
+				if (_hudLayer->AkaLabel)
+					_hudLayer->AkaLabel->setString(to_cstr(aKills));
 			}
 
 			if (currentPlayer && killerName == currentPlayer->getName())
@@ -837,6 +837,7 @@ void GameLayer::updateNetworkSync(float dt)
 					_hudLayer->killLabel->setString(to_cstr(currentPlayer->getKillNum()));
 			}
 		}
+
 		string gName;
 		int gGrp = 0;
 		if (lan->popGuardianSpawn(gName, gGrp))
