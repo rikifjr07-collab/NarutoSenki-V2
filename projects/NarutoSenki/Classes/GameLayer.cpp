@@ -258,74 +258,97 @@ void GameLayer::initTileMap()
 
 void GameLayer::initGard()
 {
-    if (LanManager::getInstance()->isClient() || _hasSpawnedGuardian)
-        return;
+	if (LanManager::getInstance()->isClient())
+		return;
 
-    setRand();
-    int index = random(2);
-    auto guardianName = index == 0 ? GuardianEnum::Roshi : GuardianEnum::Han;
+	// Cek tower mana yang sedang terancam (darahnya berkurang) dan belum punya Guardian
+	Group targetGuardianGroup = Group::Konoha;
+	bool canSpawn = false;
 
-    // Cek tower terakhir mana yang darahnya berkurang di Host
-    Group guardianGroup = (playerGroup == Group::Konoha) ? Group::Akatsuki : Group::Konoha;
-    for (auto tower : _TowerArray)
-    {
-        if (tower && tower->getHP() > 0 && tower->getHP() < tower->getMaxHP())
-        {
-            guardianGroup = tower->getGroup();
-            break;
-        }
-    }
+	for (auto tower : _TowerArray)
+	{
+		if (!tower || tower->getHP() == 0 || tower->getHP() >= tower->getMaxHP())
+			continue;
 
-    spawnNetworkGuardian(guardianName, guardianGroup);
+		if (tower->isKonohaGroup() && !_hasSpawnedKonohaGuardian)
+		{
+			targetGuardianGroup = Group::Konoha;
+			canSpawn = true;
+			break;
+		}
+		else if (tower->isAkatsukiGroup() && !_hasSpawnedAkatsukiGuardian)
+		{
+			targetGuardianGroup = Group::Akatsuki;
+			canSpawn = true;
+			break;
+		}
+	}
 
-    if (LanManager::getInstance()->isHost())
-    {
-        int grpInt = (guardianGroup == Group::Konoha) ? 0 : 1;
-        LanManager::getInstance()->broadcastGuardianSpawn(guardianName, grpInt);
-    }
+	if (!canSpawn)
+		return;
+
+	setRand();
+	int index = random(2);
+	auto guardianName = index == 0 ? GuardianEnum::Roshi : GuardianEnum::Han;
+
+	spawnNetworkGuardian(guardianName, targetGuardianGroup);
+
+	if (LanManager::getInstance()->isHost())
+	{
+		int grpInt = (targetGuardianGroup == Group::Konoha) ? 0 : 1;
+		LanManager::getInstance()->broadcastGuardianSpawn(guardianName, grpInt);
+	}
 }
 
 void GameLayer::spawnNetworkGuardian(const string &guardianName, Group guardianGroup)
 {
-    if (_hasSpawnedGuardian)
-        return;
+	if (guardianGroup == Group::Konoha)
+	{
+		if (_hasSpawnedKonohaGuardian) return;
+		_hasSpawnedKonohaGuardian = true;
+	}
+	else
+	{
+		if (_hasSpawnedAkatsukiGuardian) return;
+		_hasSpawnedAkatsukiGuardian = true;
+	}
 
-    auto guardian = Provider::create(guardianName, Role::Com, guardianGroup);
+	auto guardian = Provider::create(guardianName, Role::Com, guardianGroup);
 
-    if (guardianGroup == Group::Akatsuki)
-    {
-        guardian->setPosition(Vec2(2800, 80));
-        guardian->setSpawnPoint(Vec2(2800, 80));
-    }
-    else
-    {
-        guardian->setPosition(Vec2(272, 80));
-        guardian->setSpawnPoint(Vec2(272, 80));
-    }
+	if (guardianGroup == Group::Akatsuki)
+	{
+		guardian->setPosition(Vec2(2800, 80));
+		guardian->setSpawnPoint(Vec2(2800, 80));
+	}
+	else
+	{
+		guardian->setPosition(Vec2(272, 80));
+		guardian->setSpawnPoint(Vec2(272, 80));
+	}
 
-    addChild(guardian, -guardian->getPositionY());
-    guardian->setLV(6);
-    guardian->setHPbar();
-    guardian->setShadows();
-    guardian->setCharId(_CharacterArray.size() + 1);
+	addChild(guardian, -guardian->getPositionY());
+	guardian->setLV(6);
+	guardian->setHPbar();
+	guardian->setShadows();
+	guardian->setCharId(_CharacterArray.size() + 1);
 
-    guardian->idle();
-    guardian->setSkillEffect("smk");
+	guardian->idle();
+	guardian->setSkillEffect("smk");
 
-    if (!LanManager::getInstance()->isClient())
-    {
-        guardian->doAI();
-    }
-    else
-    {
-        guardian->_isRemoteControlled = true;
-        guardian->setWalkSpeed(0);
-    }
+	if (!LanManager::getInstance()->isClient())
+	{
+		guardian->doAI();
+	}
+	else
+	{
+		guardian->_isRemoteControlled = true;
+		guardian->setWalkSpeed(0);
+	}
 
-    _CharacterArray.push_back(guardian);
-    _hudLayer->addMapIcon();
+	_CharacterArray.push_back(guardian);
+	_hudLayer->addMapIcon();
 
-    _hasSpawnedGuardian = true;
+	_hasSpawnedGuardian = (_hasSpawnedKonohaGuardian && _hasSpawnedAkatsukiGuardian);
 }
 
 void GameLayer::initHeros()
