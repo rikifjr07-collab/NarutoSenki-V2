@@ -932,6 +932,7 @@ void GameLayer::updateNetworkSync(float dt)
 		}
 
 		// 4. Terima status Summon, Boneka, Serangga & Rasenshuriken dengan interpolasi halus
+				// 4. Terima status Summon, Boneka, Serangga & Rasenshuriken dengan interpolasi halus
 		auto mons = lan->getLatestMonsterState();
 		for (const auto &ms : mons)
 		{
@@ -940,6 +941,13 @@ void GameLayer::updateNetworkSync(float dt)
 				if (hero && hero->getCharId() == ms.masterCharId)
 				{
 					auto &mArr = hero->getMonsterArray();
+
+					// Jika di Host muncul KageHand (bayangan pengikat Shikamaru) yang belum ada di Client, munculkan di Client!
+					if (ms.name == SkillEnum::KageHand && ms.monIndex >= (int)mArr.size())
+					{
+						hero->setMon(SkillEnum::KageHand);
+					}
+
 					if (ms.monIndex >= 0 && ms.monIndex < (int)mArr.size())
 					{
 						auto mo = mArr[ms.monIndex];
@@ -984,7 +992,7 @@ void GameLayer::updateNetworkSync(float dt)
 				}
 			}
 		}
-	}
+
 }
 
 
