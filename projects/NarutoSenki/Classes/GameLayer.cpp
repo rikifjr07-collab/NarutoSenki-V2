@@ -1059,7 +1059,7 @@ void GameLayer::updateNetworkSync(float dt)
 				}
 			}
 		}
-
+	} 
 }
 
 
