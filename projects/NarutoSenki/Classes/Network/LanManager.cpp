@@ -88,6 +88,7 @@ void LanManager::disconnect()
 	_konohaKills = 0;
     _akatsukiKills = 0;
     _hasNewKillReport = false;
+	_hasNewGuardian = false;
 }
 
 bool LanManager::startHost()
@@ -329,9 +330,20 @@ void LanManager::clientReceiveLoop()
         _konohaKills = kKills;
         _akatsukiKills = aKills;
         _hasNewKillReport = true;
+	}
+}
+else if (line.find("GARD:") == 0)
+{
+    char gBuf = {0};
+    int grp = 0;
+    if (sscanf(line.c_str() + 5, "%63[^,],%d", gBuf, &grp) == 2)
+    {
+        std::lock_guard<std::mutex> lock(_dataMutex);
+        _spawnedGuardName = gBuf;
+        _spawnedGuardGroup = grp;
+        _hasNewGuardian = true;
     }
 }
-
 		}
 	}
 }
@@ -790,4 +802,25 @@ void LanManager::getTeamKills(int &konohaKills, int &akatsukiKills)
     std::lock_guard<std::mutex> lock(_dataMutex);
     konohaKills = _konohaKills;
     akatsukiKills = _akatsukiKills;
+}
+void LanManager::broadcastGuardianSpawn(const string &guardName, int group)
+{
+    if (!_isHost) return;
+    string msg = format("GARD:{},{}\n", guardName, group);
+    std::lock_guard<std::mutex> lock(_dataMutex);
+    for (int fd : _clientSockets)
+    {
+        if (fd >= 0)
+            send(fd, msg.c_str(), msg.size(), 0);
+    }
+}
+
+bool LanManager::popGuardianSpawn(string &guardName, int &group)
+{
+    std::lock_guard<std::mutex> lock(_dataMutex);
+    if (!_hasNewGuardian) return false;
+    guardName = _spawnedGuardName;
+    group = _spawnedGuardGroup;
+    _hasNewGuardian = false;
+    return true;
 }
