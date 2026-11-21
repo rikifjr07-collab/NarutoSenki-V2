@@ -4,7 +4,7 @@
 function SelectLayer:init()
     log('Initial SelectLayer...')
 
-    self.mode = _G.mode
+        self.mode = _G.mode
     if self.mode == GameMode.Clone or self.mode == GameMode.OneVsOne then
         self.enableCustomSelect = false
         self.is3v3Mode = false
@@ -14,9 +14,9 @@ function SelectLayer:init()
                              GameMode.RandomDeathmatch
         self.is4v4Mode = self.mode == GameMode.FourVsFour or self.mode ==
                              GameMode.HardCore_4Vs4
-        -- Langsung aktifkan pilih tim untuk semua mode 3v3 & 4v4 tanpa Mode Carnival
         self.enableCustomSelect = (self.is3v3Mode or self.is4v4Mode)
     end
+
     self.enableHardCore = false
 
     self.pageNum = 3
