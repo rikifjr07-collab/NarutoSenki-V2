@@ -3396,7 +3396,14 @@ void CharacterBase::setMonPer(float dt)
 	monster->_isFlipped = _isFlipped;
 
 	_monsterArray.push_back(monster);
-	monster->doAI();
+	if (!LanManager::getInstance()->isClient())
+	{
+		monster->doAI();
+	}
+	else
+	{
+		monster->setWalkSpeed(0);
+	}
 
 	getGameLayer()->addChild(monster, -monster->getPositionY());
 }
@@ -3656,6 +3663,15 @@ float CharacterBase::getHpPercent()
 
 void CharacterBase::attack(ABType type)
 {   
+	if (getName() == HeroEnum::Shikamaru)
+{
+    for (auto mo : _monsterArray)
+    {
+        if (mo && mo->getName() == SkillEnum::KageHand && mo->getState() != State::DEAD)
+            return;
+    }
+}
+
 	_netLastAttack = (int)type;
     _netAttackSeq++;
 
@@ -3966,6 +3982,15 @@ void CharacterBase::idle()
 
 void CharacterBase::walk(Vec2 direction)
 {
+	if (getName() == HeroEnum::Shikamaru)
+{
+    for (auto mo : _monsterArray)
+    {
+        if (mo && mo->getName() == SkillEnum::KageHand && mo->getState() != State::DEAD)
+            return;
+    }
+}
+
 	if (_state == State::IDLE || _state == State::WALK || (_state == State::NATTACK && isNotPlayer()))
 	{
 		isHurtingTower = false;
