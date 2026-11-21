@@ -107,6 +107,9 @@ public:
     int getNetworkWinnerGroup() const { return _winnerGroup; }
     int getPingMs() const { return _pingMs; }
     void sendPing();
+    void broadcastKillEvent(const string &killerName, const string &deadName, int killNum, int konohaKills, int akatsukiKills);
+    bool popKillEvent(string &killerName, string &deadName, int &killNum);
+    void getTeamKills(int &konohaKills, int &akatsukiKills);
 
 private:
 	LanManager();
@@ -124,6 +127,12 @@ private:
 	std::atomic<bool> _gameStarted{false};
     std::atomic<int> _winnerGroup{-1};
     std::atomic<int> _pingMs{0};
+    int _konohaKills = 0;
+    int _akatsukiKills = 0;
+    bool _hasNewKillReport = false;
+    string _lastKillerName = "";
+    string _lastDeadName = "";
+    int _lastKillStreak = 1;
 
 	int _myPlayerId = 1;
 	int _tcpSocket = -1;
