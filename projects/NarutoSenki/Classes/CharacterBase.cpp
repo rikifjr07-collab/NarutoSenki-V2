@@ -3192,7 +3192,7 @@ void CharacterBase::setMon(const string &monName)
 			monster->setVisible(false);
 		}
 	}
-	else if (monName == "Kage")
+		else if (monName == "Kage")
 	{
 		_isCatchOne = true;
 		monster->setPosition(Vec2(getPositionX() + (_isFlipped ? -getContentSize().width / 2 + 4 : getContentSize().width / 2 - 4), getPositionY()));
@@ -3208,8 +3208,12 @@ void CharacterBase::setMon(const string &monName)
 		stopAllActions();
 		_monsterArray.push_back(monster);
 		monster->attack(NAttack);
-		monster->doAI();
+		if (!LanManager::getInstance()->isClient())
+		{
+			monster->doAI();
+		}
 	}
+
 	else if (monName == "KageHand")
 	{
 		Vec2 dir = Vec2(_isFlipped ? getPositionX() - getContentSize().width : getPositionX() + getContentSize().width, getPositionY());
