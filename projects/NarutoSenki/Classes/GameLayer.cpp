@@ -40,12 +40,16 @@ for (int i = 0; i < (int)layer->_CharacterArray.size(); i++)
 	auto hero = layer->_CharacterArray[i];
 	hero->setWalkSpeed(hero->_originSpeed);
 
-	if (lan->isClient())
+		if (lan->isClient())
 	{
 		if (hero != layer->currentPlayer)
+		{
 			hero->_isRemoteControlled = true;
+			hero->setWalkSpeed(0);
+		}
 		continue;
 	}
+
 	else if (lan->isHost())
 	{
 		NetSlotData slot = lan->getSlot(i);
@@ -454,10 +458,15 @@ void GameLayer::addFlog(float dt)
 		flog->setPosition(Vec2(13 * 32, flog->_mainPosY));
 		flog->setHPbar();
 		flog->idle();
-		if (!LanManager::getInstance()->isClient())
-{
-    flog->doAI();
-}
+				if (!LanManager::getInstance()->isClient())
+		{
+			flog->doAI();
+		}
+		else
+		{
+			flog->setWalkSpeed(0);
+		}
+
 
 		_KonohaFlogArray.push_back(flog);
 		addChild(flog, -int(flog->getPositionY()));
