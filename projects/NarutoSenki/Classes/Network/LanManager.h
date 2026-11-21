@@ -111,6 +111,8 @@ public:
     void broadcastKillEvent(const string &killerName, const string &deadName, int killNum, int konohaKills, int akatsukiKills);
     bool popKillEvent(string &killerName, string &deadName, int &killNum);
     void getTeamKills(int &konohaKills, int &akatsukiKills);
+    void broadcastGuardianSpawn(const string &guardName, int group);
+    bool popGuardianSpawn(string &guardName, int &group);
 
 private:
 	LanManager();
@@ -134,6 +136,9 @@ private:
     string _lastKillerName = "";
     string _lastDeadName = "";
     int _lastKillStreak = 1;
+    bool _hasNewGuardian = false;
+    string _spawnedGuardName = "";
+    int _spawnedGuardGroup = 0;
 
 	int _myPlayerId = 1;
 	int _tcpSocket = -1;
