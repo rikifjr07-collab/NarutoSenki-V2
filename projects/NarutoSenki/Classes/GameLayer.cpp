@@ -258,38 +258,74 @@ void GameLayer::initTileMap()
 
 void GameLayer::initGard()
 {
-	setRand();
-	int index = random(2);
-	auto guardianName = index == 0 ? GuardianEnum::Roshi : GuardianEnum::Han;
-	auto guardianGroup = playerGroup == Group::Konoha ? Group::Akatsuki : Group::Konoha;
-	auto guardian = Provider::create(guardianName, Role::Com, guardianGroup);
+    if (LanManager::getInstance()->isClient() || _hasSpawnedGuardian)
+        return;
 
-	if (playerGroup == Group::Konoha)
-	{
-		guardian->setPosition(Vec2(2800, 80));
-		guardian->setSpawnPoint(Vec2(2800, 80));
-	}
-	else
-	{
-		guardian->setPosition(Vec2(272, 80));
-		guardian->setSpawnPoint(Vec2(272, 80));
-	}
+    setRand();
+    int index = random(2);
+    auto guardianName = index == 0 ? GuardianEnum::Roshi : GuardianEnum::Han;
 
-	addChild(guardian, -guardian->getPositionY());
-	guardian->setLV(6);
-	guardian->setHPbar();
-	guardian->setShadows();
-	guardian->setCharId(_CharacterArray.size() + 1);
+    // Cek tower terakhir mana yang darahnya berkurang di Host
+    Group guardianGroup = (playerGroup == Group::Konoha) ? Group::Akatsuki : Group::Konoha;
+    for (auto tower : _TowerArray)
+    {
+        if (tower && tower->getHP() > 0 && tower->getHP() < tower->getMaxHP())
+        {
+            guardianGroup = tower->getGroup();
+            break;
+        }
+    }
 
-	guardian->idle();
-	guardian->setSkillEffect("smk");
+    spawnNetworkGuardian(guardianName, guardianGroup);
 
-	guardian->doAI();
+    if (LanManager::getInstance()->isHost())
+    {
+        int grpInt = (guardianGroup == Group::Konoha) ? 0 : 1;
+        LanManager::getInstance()->broadcastGuardianSpawn(guardianName, grpInt);
+    }
+}
 
-	_CharacterArray.push_back(guardian);
-	_hudLayer->addMapIcon();
+void GameLayer::spawnNetworkGuardian(const string &guardianName, Group guardianGroup)
+{
+    if (_hasSpawnedGuardian)
+        return;
 
-	_hasSpawnedGuardian = true;
+    auto guardian = Provider::create(guardianName, Role::Com, guardianGroup);
+
+    if (guardianGroup == Group::Akatsuki)
+    {
+        guardian->setPosition(Vec2(2800, 80));
+        guardian->setSpawnPoint(Vec2(2800, 80));
+    }
+    else
+    {
+        guardian->setPosition(Vec2(272, 80));
+        guardian->setSpawnPoint(Vec2(272, 80));
+    }
+
+    addChild(guardian, -guardian->getPositionY());
+    guardian->setLV(6);
+    guardian->setHPbar();
+    guardian->setShadows();
+    guardian->setCharId(_CharacterArray.size() + 1);
+
+    guardian->idle();
+    guardian->setSkillEffect("smk");
+
+    if (!LanManager::getInstance()->isClient())
+    {
+        guardian->doAI();
+    }
+    else
+    {
+        guardian->_isRemoteControlled = true;
+        guardian->setWalkSpeed(0);
+    }
+
+    _CharacterArray.push_back(guardian);
+    _hudLayer->addMapIcon();
+
+    _hasSpawnedGuardian = true;
 }
 
 void GameLayer::initHeros()
@@ -777,6 +813,13 @@ void GameLayer::updateNetworkSync(float dt)
 				if (_hudLayer && _hudLayer->killLabel)
 					_hudLayer->killLabel->setString(to_cstr(currentPlayer->getKillNum()));
 			}
+		}
+		string gName;
+		int gGrp = 0;
+		if (lan->popGuardianSpawn(gName, gGrp))
+		{
+			Group grpEnum = (gGrp == 0) ? Group::Konoha : Group::Akatsuki;
+			spawnNetworkGuardian(gName, grpEnum);
 		}
 
 		// 1. Terima status 6 Hero
