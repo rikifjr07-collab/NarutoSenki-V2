@@ -4476,6 +4476,43 @@ void CharacterBase::dead()
 	// kill all buffEffect
 	if (isPlayerOrCom())
 	{
+		if (LanManager::getInstance()->isHost() && isNotGuardian())
+		{
+			CharacterBase *killer = _slayer ? (_slayer->_master ? _slayer->_master : _slayer) : nullptr;
+			string killerName = killer ? killer->getName() : "Tower";
+			int streak = 1;
+			if (killer && killer->isPlayerOrCom())
+			{
+				killer->setKillNum(killer->getKillNum() + 1);
+				streak = killer->getKillNum();
+			}
+
+			int kKills = 0;
+			int aKills = 0;
+			for (auto h : getGameLayer()->_CharacterArray)
+			{
+				if (h && h->isPlayerOrCom() && h->isNotGuardian())
+				{
+					if (h->isKonohaGroup())
+						kKills += h->getKillNum();
+					else
+						aKills += h->getKillNum();
+				}
+			}
+
+			getGameLayer()->setReport(killerName, getName(), streak);
+			if (getGameLayer()->getHudLayer())
+			{
+				if (getGameLayer()->getHudLayer()->kCountLabel)
+					getGameLayer()->getHudLayer()->kCountLabel->setString(to_cstr(kKills));
+				if (getGameLayer()->getHudLayer()->aCountLabel)
+					getGameLayer()->getHudLayer()->aCountLabel->setString(to_cstr(aKills));
+				if (killer == getGameLayer()->currentPlayer && getGameLayer()->getHudLayer()->killLabel)
+					getGameLayer()->getHudLayer()->killLabel->setString(to_cstr(killer->getKillNum()));
+			}
+			LanManager::getInstance()->broadcastKillEvent(killerName, getName(), streak, kKills, aKills);
+		}
+
 		unschedule(schedule_selector(CharacterBase::healBuff));
 		_buffStartTime = 0;
 		unschedule(schedule_selector(CharacterBase::dehealBuff));
