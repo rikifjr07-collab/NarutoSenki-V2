@@ -85,6 +85,9 @@ void LanManager::disconnect()
 	}
 	_myPlayerId = 1;
 	_statusMsg = "Offline";
+	_konohaKills = 0;
+    _akatsukiKills = 0;
+    _hasNewKillReport = false;
 }
 
 bool LanManager::startHost()
