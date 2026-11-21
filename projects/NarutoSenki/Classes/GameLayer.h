@@ -103,6 +103,7 @@ public:
 	void initFlogs();
 	void initTower();
 	void initGard();
+    void spawnNetworkGuardian(const string &guardianName, Group guardianGroup);
 	void initEffects();
 
 	void updateViewPoint(float dt);
