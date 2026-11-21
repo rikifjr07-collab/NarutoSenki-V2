@@ -4507,10 +4507,10 @@ void CharacterBase::dead()
 			getGameLayer()->setReport(killerName, getName(), streak);
 			if (getGameLayer()->getHudLayer())
 			{
-				if (getGameLayer()->getHudLayer()->kCountLabel)
-					getGameLayer()->getHudLayer()->kCountLabel->setString(to_cstr(kKills));
-				if (getGameLayer()->getHudLayer()->aCountLabel)
-					getGameLayer()->getHudLayer()->aCountLabel->setString(to_cstr(aKills));
+				if (getGameLayer()->getHudLayer()->KonoLabel)
+					getGameLayer()->getHudLayer()->KonoLabel->setString(to_cstr(kKills));
+				if (getGameLayer()->getHudLayer()->AkaLabel)
+					getGameLayer()->getHudLayer()->AkaLabel->setString(to_cstr(aKills));
 				if (killer == getGameLayer()->currentPlayer && getGameLayer()->getHudLayer()->killLabel)
 					getGameLayer()->getHudLayer()->killLabel->setString(to_cstr(killer->getKillNum()));
 			}
