@@ -740,6 +740,28 @@ void GameLayer::updateNetworkSync(float dt)
 		else
 		{
 			s_holdTick = 0;
+		} 
+		string killerName, deadName;
+		int killStreak = 1;
+		if (lan->popKillEvent(killerName, deadName, killStreak))
+		{
+			setReport(killerName, deadName, killStreak);
+			int kKills = 0, aKills = 0;
+			lan->getTeamKills(kKills, aKills);
+			if (_hudLayer)
+			{
+				if (_hudLayer->kCountLabel)
+					_hudLayer->kCountLabel->setString(to_cstr(kKills));
+				if (_hudLayer->aCountLabel)
+					_hudLayer->aCountLabel->setString(to_cstr(aKills));
+			}
+
+			if (currentPlayer && killerName == currentPlayer->getName())
+			{
+				currentPlayer->setKillNum(currentPlayer->getKillNum() + 1);
+				if (_hudLayer && _hudLayer->killLabel)
+					_hudLayer->killLabel->setString(to_cstr(currentPlayer->getKillNum()));
+			}
 		}
 
 		// 1. Terima status 6 Hero
