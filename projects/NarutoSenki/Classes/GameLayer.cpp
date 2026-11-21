@@ -802,6 +802,13 @@ void GameLayer::updateNetworkSync(float dt)
 					{
 						hero->setHPValue(st.hp, false);
 						hero->_isSticking = st.isSticking;
+					    if (st.isSticking && hero->getState() != State::HURT && hero->getName() != HeroEnum::Shikamaru)
+					    {
+						    hero->stopAllActions();
+						    hero->setState(State::HURT);
+						    auto frame = hero->getSpriteFrame(hero->getName() + "_Hurt_02");
+						    if (frame) hero->setDisplayFrame(frame);
+					    }
 
 						if (_hudLayer)
 						{
@@ -1101,6 +1108,7 @@ void GameLayer::JoyStickRelease()
 
 void GameLayer::JoyStickUpdate(Vec2 direction)
 {
+	if (currentPlayer && currentPlayer->_isSticking) return;
     if (currentPlayer && currentPlayer->getName() == HeroEnum::Shikamaru)
     {
         for (auto mo : currentPlayer->getMonsterArray())
@@ -1124,6 +1132,7 @@ void GameLayer::JoyStickUpdate(Vec2 direction)
 
 void GameLayer::attackButtonClick(ABType type)
 {
+	if (currentPlayer && currentPlayer->_isSticking) return;
     if (type == NAttack)
     {
         _isAttackButtonRelease = false;
