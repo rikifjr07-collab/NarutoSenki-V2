@@ -34,6 +34,7 @@ struct NetHeroSync
 	uint32_t maxHp = 0;
 	int lastAttack = -1;
 	int attackSeq = 0;
+    bool isSticking = false;
 };
 struct NetFlogSync
 {
