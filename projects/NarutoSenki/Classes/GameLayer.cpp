@@ -873,7 +873,8 @@ void GameLayer::updateNetworkSync(float dt)
 					    {
 						    hero->stopAllActions();
 						    hero->setState(State::HURT);
-						    auto frame = hero->getSpriteFrame(hero->getName() + "_Hurt_02");
+						    auto frame = SpriteFrameCache::sharedSpriteFrameCache()->spriteFrameByName((hero->getName() + "_Hurt_02").c_str());
+
 						    if (frame) hero->setDisplayFrame(frame);
 					    }
 
