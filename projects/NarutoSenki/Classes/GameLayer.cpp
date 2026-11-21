@@ -662,10 +662,23 @@ void GameLayer::updateNetworkSync(float dt)
 		}
 
 		// 1. Kirim status 6 Hero
-		vector<NetHeroSync> snapshot;
+				vector<NetHeroSync> snapshot;
 		for (auto hero : _CharacterArray)
 		{
 			if (!hero) continue;
+			bool sticking = hero->_isSticking;
+			if (hero->getName() == HeroEnum::Shikamaru)
+			{
+				for (auto mo : hero->getMonsterArray())
+				{
+					if (mo && mo->getName() == SkillEnum::KageHand && mo->getState() != State::DEAD)
+					{
+						sticking = true;
+						break;
+					}
+				}
+			}
+
 			NetHeroSync item{};
 			item.charId = hero->getCharId();
 			item.x = hero->getPositionX();
@@ -676,9 +689,11 @@ void GameLayer::updateNetworkSync(float dt)
 			item.maxHp = hero->getMaxHP();
 			item.lastAttack = hero->_netLastAttack;
 			item.attackSeq = hero->_netAttackSeq;
+			item.isSticking = sticking;
 			snapshot.push_back(item);
 		}
 		lan->broadcastWorldState(snapshot);
+
 
 		// 2. Kirim status Minion (Flog)
 		vector<NetFlogSync> flogSnap;
@@ -786,12 +801,19 @@ void GameLayer::updateNetworkSync(float dt)
 					if (hero == currentPlayer)
 					{
 						hero->setHPValue(st.hp, false);
-						bool isHostCC = (st.state == (int)State::HURT || st.state == (int)State::FLOAT);
+						hero->_isSticking = st.isSticking;
+
+						if (_hudLayer)
+						{
+							_hudLayer->_isAllButtonLocked = st.isSticking;
+						}
+
+						bool isHostCC = (st.state == (int)State::HURT || st.state == (int)State::FLOAT || st.isSticking);
 						if (isHostCC || ccpDistance(hero->getPosition(), Vec2(st.x, st.y)) > 110.0f)
 						{
 							hero->setPosition(Vec2(st.x, st.y));
 							hero->setZOrder(-st.y);
-							if (isHostCC && hero->getState() != (State)st.state)
+							if (isHostCC && hero->getState() == State::WALK)
 							{
 								hero->idle();
 							}
