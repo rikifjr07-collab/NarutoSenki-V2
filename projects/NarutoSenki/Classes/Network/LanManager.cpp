@@ -479,7 +479,8 @@ void LanManager::broadcastWorldState(const vector<NetHeroSync> &heroes)
 	for (size_t i = 0; i < heroes.size(); i++)
 	{
 		const auto &h = heroes[i];
-		pkt += format("{},{:.1f},{:.1f},{},{},{},{},{},{}", h.charId, h.x, h.y, h.isFlipped ? 1 : 0, h.state, h.hp, h.maxHp, h.lastAttack, h.attackSeq);
+		pkt += format("{},{:.1f},{:.1f},{},{},{},{},{},{},{}",
+              h.charId, h.x, h.y, h.isFlipped ? 1 : 0, h.state, h.hp, h.maxHp, h.lastAttack, h.attackSeq, h.isSticking ? 1 : 0);
 		if (i + 1 < heroes.size()) pkt += ";";
 	}
 
@@ -542,12 +543,15 @@ else if (_isClient && pkt.find("PONG:") == 0)
 	while (std::getline(ss, seg, ';'))
 	{
 		NetHeroSync h{};
-		int flip = 0;
-		if (sscanf(seg.c_str(), "%d,%f,%f,%d,%d,%u,%u,%d,%d", &h.charId, &h.x, &h.y, &flip, &h.state, &h.hp, &h.maxHp, &h.lastAttack, &h.attackSeq) == 9)
-		{
-			h.isFlipped = (flip == 1);
-			list.push_back(h);
-		}
+int flip = 0, stick = 0;
+if (sscanf(seg.c_str(), "%d,%f,%f,%d,%d,%u,%u,%d,%d,%d",
+           &h.charId, &h.x, &h.y, &flip, &h.state, &h.hp, &h.maxHp, &h.lastAttack, &h.attackSeq, &stick) == 10)
+{
+    h.isFlipped = (flip == 1);
+    h.isSticking = (stick == 1);
+    list.push_back(h);
+}
+
 	}
 	std::lock_guard<std::mutex> lock(_dataMutex);
 	_latestWorldState = list;
