@@ -4,7 +4,7 @@
 function SelectLayer:init()
     log('Initial SelectLayer...')
 
-        self.mode = _G.mode
+    self.mode = _G.mode
     if self.mode == GameMode.Clone or self.mode == GameMode.OneVsOne then
         self.enableCustomSelect = false
         self.is3v3Mode = false
@@ -16,7 +16,6 @@ function SelectLayer:init()
                              GameMode.HardCore_4Vs4
         self.enableCustomSelect = (self.is3v3Mode or self.is4v4Mode)
     end
-
     self.enableHardCore = false
 
     self.pageNum = 3
