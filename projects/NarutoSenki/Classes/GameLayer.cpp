@@ -599,13 +599,31 @@ void GameLayer::updateNetworkSync(float dt)
 					Hero *targetHero = _CharacterArray[s];
 					if (targetHero && targetHero->getState() != State::DEAD)
 					{
-						if (inp.posX > 0.0f && inp.posY > 0.0f && targetHero->getState() != State::HURT && targetHero->getState() != State::FLOAT)
+						bool isShikamaruBinding = false;
+						if (targetHero->getName() == HeroEnum::Shikamaru)
+						{
+							for (auto mo : targetHero->getMonsterArray())
+							{
+								if (mo && mo->getName() == SkillEnum::KageHand && mo->getState() != State::DEAD)
+								{
+									isShikamaruBinding = true;
+									break;
+								}
+							}
+						}
+
+						if (!isShikamaruBinding && inp.posX > 0.0f && inp.posY > 0.0f &&
+							targetHero->getState() != State::HURT && targetHero->getState() != State::FLOAT)
 						{
 							targetHero->setPosition(Vec2(inp.posX, inp.posY));
 							targetHero->setZOrder(-inp.posY);
 						}
-						targetHero->_isFlipped = inp.isFlipped;
-						targetHero->setFlipX(inp.isFlipped);
+
+						if (!isShikamaruBinding)
+						{
+							targetHero->_isFlipped = inp.isFlipped;
+							targetHero->setFlipX(inp.isFlipped);
+						}
 
 						if (inp.actionType == 99)
 						{
@@ -673,8 +691,8 @@ void GameLayer::updateNetworkSync(float dt)
 			towerSnap.push_back({tower->getCharId(), tower->getHP(), tower->getMaxHP()});
 		}
 		lan->broadcastTowerState(towerSnap);
-				// 4. Terima status Summon, Boneka, Serangga & Rasenshuriken
-				// 4. Kirim status Summon, Boneka, Serangga & Rasenshuriken
+
+		// 4. Kirim status Summon, Boneka, Serangga & Rasenshuriken
 		vector<NetMonsterSync> monSnap;
 		for (auto hero : _CharacterArray)
 		{
@@ -690,11 +708,27 @@ void GameLayer::updateNetworkSync(float dt)
 			}
 		}
 		lan->broadcastMonsterState(monSnap);
-
-
 	}
 	else if (lan->isClient())
 	{
+		// Kirim sinyal serang terus-menerus selama tombol NAttack ditahan (Sai/Shino/Deidara)
+		static int s_holdTick = 0;
+		if (!_isAttackButtonRelease && currentPlayer && currentPlayer->getState() != State::DEAD)
+		{
+			s_holdTick++;
+			if (s_holdTick >= 3)
+			{
+				s_holdTick = 0;
+				float faceDir = currentPlayer->_isFlipped ? -1.0f : 1.0f;
+				lan->sendClientInput(faceDir, 0, (int)NAttack,
+									 currentPlayer->getPositionX(), currentPlayer->getPositionY(), currentPlayer->_isFlipped);
+			}
+		}
+		else
+		{
+			s_holdTick = 0;
+		}
+
 		// 1. Terima status 6 Hero
 		auto states = lan->getLatestWorldState();
 		for (const auto &st : states)
@@ -718,7 +752,7 @@ void GameLayer::updateNetworkSync(float dt)
 					{
 						hero->setHPValue(st.hp, false);
 						bool isHostCC = (st.state == (int)State::HURT || st.state == (int)State::FLOAT);
-						if (isHostCC || ccpDistance(hero->getPosition(), Vec2(st.x, st.y)) > 35.0f)
+						if (isHostCC || ccpDistance(hero->getPosition(), Vec2(st.x, st.y)) > 110.0f)
 						{
 							hero->setPosition(Vec2(st.x, st.y));
 							hero->setZOrder(-st.y);
@@ -732,10 +766,15 @@ void GameLayer::updateNetworkSync(float dt)
 
 					float oldX = hero->getPositionX();
 					float oldY = hero->getPositionY();
-					hero->setPosition(Vec2(st.x, st.y));
+					float dist = ccpDistance(Vec2(oldX, oldY), Vec2(st.x, st.y));
+					if (dist > 150.0f || dist < 1.0f)
+						hero->setPosition(Vec2(st.x, st.y));
+					else
+						hero->setPosition(Vec2(oldX + (st.x - oldX) * 0.55f, oldY + (st.y - oldY) * 0.55f));
+
 					hero->_isFlipped = st.isFlipped;
 					hero->setFlipX(st.isFlipped);
-					hero->setZOrder(-st.y);
+					hero->setZOrder(-hero->getPositionY());
 					hero->setHPValue(st.hp, false);
 
 					if (st.attackSeq > hero->_netAttackSeq && st.lastAttack >= 0)
@@ -746,7 +785,7 @@ void GameLayer::updateNetworkSync(float dt)
 						else
 							hero->attack((ABType)st.lastAttack);
 					}
-					else if (st.state == (int)State::WALK || std::abs(st.x - oldX) > 0.5f || std::abs(st.y - oldY) > 0.5f)
+					else if (st.state == (int)State::WALK || dist > 1.5f)
 					{
 						if (hero->getState() == State::IDLE)
 							hero->walk(Vec2(st.isFlipped ? -1.0f : 1.0f, 0.0f));
@@ -760,7 +799,7 @@ void GameLayer::updateNetworkSync(float dt)
 			}
 		}
 
-		// 2. Terima status Minion (Flog)
+		// 2. Terima status Minion (Flog) dengan interpolasi halus
 		auto flogs = lan->getLatestFlogState();
 		for (const auto &fs : flogs)
 		{
@@ -778,17 +817,23 @@ void GameLayer::updateNetworkSync(float dt)
 				}
 
 				float oldX = f->getPositionX();
-				f->setPosition(Vec2(fs.x, fs.y));
+				float oldY = f->getPositionY();
+				float dist = ccpDistance(Vec2(oldX, oldY), Vec2(fs.x, fs.y));
+				if (dist > 150.0f || dist < 1.0f)
+					f->setPosition(Vec2(fs.x, fs.y));
+				else
+					f->setPosition(Vec2(oldX + (fs.x - oldX) * 0.55f, oldY + (fs.y - oldY) * 0.55f));
+
 				f->_isFlipped = fs.isFlipped;
 				f->setFlipX(fs.isFlipped);
-				f->setZOrder(-fs.y);
+				f->setZOrder(-f->getPositionY());
 				f->setHPValue(fs.hp, false);
 
 				if (fs.state == (int)State::NATTACK && f->getState() != State::NATTACK)
 				{
 					f->attack(NAttack);
 				}
-				else if (fs.state == (int)State::WALK || std::abs(fs.x - oldX) > 0.5f)
+				else if (fs.state == (int)State::WALK || dist > 1.5f)
 				{
 					if (f->getState() == State::IDLE)
 						f->walk(Vec2(fs.isFlipped ? -1.0f : 1.0f, 0.0f));
@@ -821,7 +866,8 @@ void GameLayer::updateNetworkSync(float dt)
 				}
 			}
 		}
-				// 4. Terima status Summon, Boneka, Serangga & Rasenshuriken
+
+		// 4. Terima status Summon, Boneka, Serangga & Rasenshuriken dengan interpolasi halus
 		auto mons = lan->getLatestMonsterState();
 		for (const auto &ms : mons)
 		{
@@ -844,10 +890,15 @@ void GameLayer::updateNetworkSync(float dt)
 
 						float oldX = mo->getPositionX();
 						float oldY = mo->getPositionY();
-						mo->setPosition(Vec2(ms.x, ms.y));
+						float dist = ccpDistance(Vec2(oldX, oldY), Vec2(ms.x, ms.y));
+						if (dist > 150.0f || dist < 1.0f)
+							mo->setPosition(Vec2(ms.x, ms.y));
+						else
+							mo->setPosition(Vec2(oldX + (ms.x - oldX) * 0.55f, oldY + (ms.y - oldY) * 0.55f));
+
 						mo->_isFlipped = ms.isFlipped;
 						mo->setFlipX(ms.isFlipped);
-						mo->setZOrder(-ms.y);
+						mo->setZOrder(-mo->getPositionY());
 						if (ms.maxHp > 0)
 							mo->setHPValue(ms.hp, false);
 
@@ -855,7 +906,7 @@ void GameLayer::updateNetworkSync(float dt)
 						{
 							mo->attack(NAttack);
 						}
-						else if (ms.state == (int)State::WALK || std::abs(ms.x - oldX) > 0.5f || std::abs(ms.y - oldY) > 0.5f)
+						else if (ms.state == (int)State::WALK || dist > 1.5f)
 						{
 							if (mo->getState() == State::IDLE)
 								mo->walk(Vec2(ms.isFlipped ? -1.0f : 1.0f, 0.0f));
@@ -869,9 +920,9 @@ void GameLayer::updateNetworkSync(float dt)
 				}
 			}
 		}
-
 	}
 }
+
 
 void GameLayer::setTowerState(int charId)
 {
@@ -993,6 +1044,15 @@ void GameLayer::JoyStickRelease()
 
 void GameLayer::JoyStickUpdate(Vec2 direction)
 {
+    if (currentPlayer && currentPlayer->getName() == HeroEnum::Shikamaru)
+    {
+        for (auto mo : currentPlayer->getMonsterArray())
+        {
+            if (mo && mo->getName() == SkillEnum::KageHand && mo->getState() != State::DEAD)
+                return;
+        }
+    }
+
     if (!ougisChar && currentPlayer)
     {
         currentPlayer->walk(direction);
@@ -1003,6 +1063,7 @@ void GameLayer::JoyStickUpdate(Vec2 direction)
             direction.x, direction.y, -1, currentPlayer->getPositionX(), currentPlayer->getPositionY(), currentPlayer->_isFlipped);
     }
 }
+
 
 void GameLayer::attackButtonClick(ABType type)
 {
