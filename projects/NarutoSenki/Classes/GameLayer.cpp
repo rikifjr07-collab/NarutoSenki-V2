@@ -932,10 +932,21 @@ else if (st.hp > 0 && hero->getState() == State::DEAD)
 					{
 						hero->_netAttackSeq = st.attackSeq;
 						if (st.lastAttack == (int)Item1)
+						{
 							hero->setItem(Item1);
+						}
 						else
+						{
+							// Paksa state ke IDLE dulu agar attack() di Client TIDAK PERNAH ditolak
+							if (hero->getState() != State::IDLE && hero->getState() != State::WALK)
+							{
+								hero->stopAllActions();
+								hero->setState(State::IDLE);
+							}
 							hero->attack((ABType)st.lastAttack);
+						}
 					}
+
 					else if (st.state == (int)State::WALK || dist > 3.0f)
 					{
 						if (hero->getState() == State::IDLE)
