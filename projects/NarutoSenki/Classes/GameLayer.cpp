@@ -684,7 +684,12 @@ void GameLayer::updateNetworkSync(float dt)
 							}
 						}
 
-						if (!isShikamaruBinding && inp.posX > 0.0f && inp.posY > 0.0f &&
+						bool isAtBase = (ccpDistance(targetHero->getPosition(), targetHero->getSpawnPoint()) < 60.0f);
+						bool isPacketFarFromBase = (ccpDistance(Vec2(inp.posX, inp.posY), targetHero->getSpawnPoint()) > 300.0f);
+						bool isStaleDeathPacket = (isAtBase && isPacketFarFromBase && inp.actionType == -1);
+
+						if (!isShikamaruBinding && !isStaleDeathPacket &&
+							inp.posX > 0.0f && inp.posY > 0.0f &&
 							targetHero->getState() != State::HURT && targetHero->getState() != State::FLOAT)
 						{
 							targetHero->setPosition(Vec2(inp.posX, inp.posY));
@@ -855,15 +860,29 @@ void GameLayer::updateNetworkSync(float dt)
 				if (hero && hero->getCharId() == st.charId)
 				{
 					if (st.hp == 0 && hero->getState() != State::DEAD)
-					{
-						hero->setHPValue(0, false);
-						hero->dead();
-						break;
-					}
-					else if (st.hp > 0 && hero->getState() == State::DEAD)
-					{
-						hero->reborn(0);
-					}
+{
+	hero->setHPValue(0, false);
+	hero->_hasNetTarget = false;
+	hero->dead();
+	break;
+}
+else if (st.hp > 0 && hero->getState() == State::DEAD)
+{
+	hero->reborn(0);
+	hero->setPosition(hero->getSpawnPoint());
+	hero->_netTargetPos = hero->getSpawnPoint();
+	hero->_hasNetTarget = true;
+	hero->setZOrder(-hero->getPositionY());
+	
+	if (hero == currentPlayer)
+	{
+		float faceDir = hero->_isFlipped ? -1.0f : 1.0f;
+		lan->sendClientInput(faceDir, 0, 99,
+							 hero->getSpawnPoint().x, hero->getSpawnPoint().y, hero->_isFlipped);
+	}
+	break;
+}
+
 
 					if (hero == currentPlayer)
 					{
