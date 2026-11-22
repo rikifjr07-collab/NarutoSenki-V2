@@ -866,14 +866,19 @@ void GameLayer::updateNetworkSync(float dt)
 	hero->dead();
 	break;
 }
-else if (st.hp > 0 && hero->getState() == State::DEAD)
-{
-	hero->reborn(0);
-	hero->setPosition(hero->getSpawnPoint());
-	hero->_netTargetPos = hero->getSpawnPoint();
-	hero->_hasNetTarget = true;
-	hero->setZOrder(-hero->getPositionY());
-	
+					else if (st.hp > 0 && hero->getState() == State::DEAD)
+					{
+						if (hero->_hpBar)
+						{
+							hero->_hpBar->removeFromParent();
+							hero->_hpBar = nullptr;
+						}
+						hero->reborn(0);
+						hero->setPosition(hero->getSpawnPoint());
+						hero->_netTargetPos = hero->getSpawnPoint();
+						hero->_hasNetTarget = true;
+						hero->setZOrder(-hero->getPositionY());
+
 	if (hero == currentPlayer)
 	{
 		float faceDir = hero->_isFlipped ? -1.0f : 1.0f;
