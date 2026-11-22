@@ -334,7 +334,7 @@ void LanManager::clientReceiveLoop()
 }
 else if (line.find("GARD:") == 0)
 {
-    char gBuf = {0};
+    char gBuf[64] = {0};
     int grp = 0;
     if (sscanf(line.c_str() + 5, "%63[^,],%d", gBuf, &grp) == 2)
     {
