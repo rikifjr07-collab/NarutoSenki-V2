@@ -146,7 +146,7 @@ public:
     bool _isRemoteControlled = false;
     Vec2 _netTargetPos = Vec2(0, 0);
     bool _hasNetTarget = false;
-
+    bool _hasReportedDeath = false;
 
 	PROP_UInt(_hp, HP);
 	PROP_UInt(_maxHP, MaxHP);
