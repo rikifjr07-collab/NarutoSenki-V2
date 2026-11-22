@@ -4434,8 +4434,7 @@ void CharacterBase::dead()
 	_startPoint = Vec2(0, 0);
 	_markPoint = Vec2(0, 0);
 	_hasNetTarget = false;
-	_netTargetPos = Vec2::ZERO;
-
+	_netTargetPos = Vec2(0, 0);
 
 	_sticker = nullptr;
 
