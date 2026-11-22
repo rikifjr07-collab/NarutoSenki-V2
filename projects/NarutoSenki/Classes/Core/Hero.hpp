@@ -525,8 +525,25 @@ public:
 
 			removeFromParent();
 		}
-		else if (isNotGuardian())
+	    else if (isNotGuardian())
 		{
+			if (!LanManager::getInstance()->isClient())
+			{
+				if (rebornLabelTime == 3)
+				{
+					scheduleOnce(schedule_selector(Hero::reborn), 3.0f);
+				}
+				else
+				{
+					rebornLabelTime = getRebornTime();
+					scheduleOnce(schedule_selector(Hero::reborn), getRebornTime());
+				}
+			}
+			else
+			{
+				rebornLabelTime = (rebornLabelTime == 3) ? 3 : getRebornTime();
+			}
+
 			if (rebornLabelTime == 3)
 			{
 				scheduleOnce(schedule_selector(Hero::reborn), 3.0f);
