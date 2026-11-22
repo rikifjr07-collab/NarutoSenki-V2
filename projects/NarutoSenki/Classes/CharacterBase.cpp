@@ -4503,8 +4503,9 @@ void CharacterBase::dead()
 	// kill all buffEffect
 	if (isPlayerOrCom())
 	{
-		if (LanManager::getInstance()->isHost() && isNotGuardian())
+		if (LanManager::getInstance()->isHost() && isNotGuardian() && !_hasReportedDeath)
 		{
+			_hasReportedDeath = true;
 			CharacterBase *killer = _slayer ? (_slayer->_master ? _slayer->_master : _slayer) : nullptr;
 			string killerName = killer ? killer->getName() : "Tower";
 			int streak = 1;
@@ -4539,7 +4540,7 @@ void CharacterBase::dead()
 			}
 			LanManager::getInstance()->broadcastKillEvent(killerName, getName(), streak, kKills, aKills);
 		}
-
+		
 		unschedule(schedule_selector(CharacterBase::healBuff));
 		_buffStartTime = 0;
 		unschedule(schedule_selector(CharacterBase::dehealBuff));
@@ -4672,7 +4673,8 @@ void CharacterBase::dealloc()
 
 void CharacterBase::reborn(float dt)
 {
-	getGameModeHandler()->onCharacterReborn(this);
+    _hasReportedDeath = false;
+    getGameModeHandler()->onCharacterReborn(this);
 }
 
 void CharacterBase::setAI(float dt)
