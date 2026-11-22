@@ -1,5 +1,6 @@
 #pragma once
 #include "Element.h"
+#include "Network/LanManager.h"
 
 typedef std::function<void()> AIHandler;
 
