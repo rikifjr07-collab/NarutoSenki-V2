@@ -144,6 +144,9 @@ public:
     int _netLastAttack = -1;
     int _netAttackSeq = 0;
     bool _isRemoteControlled = false;
+    Vec2 _netTargetPos = Vec2::ZERO;
+    bool _hasNetTarget = false;
+
 
 	PROP_UInt(_hp, HP);
 	PROP_UInt(_maxHP, MaxHP);
