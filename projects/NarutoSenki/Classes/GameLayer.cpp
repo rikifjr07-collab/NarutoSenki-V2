@@ -313,7 +313,28 @@ void GameLayer::spawnNetworkGuardian(const string &guardianName, Group guardianG
 		_hasSpawnedAkatsukiGuardian = true;
 	}
 
+	// 1. Pastikan aset sprite Guardian (Roshi / Han) sudah dimuat ke SpriteFrameCache agar tidak FC!
+	string plistPath = format("Unit/Guardian/{}/{}.plist", guardianName, guardianName);
+	if (FileUtils::sharedFileUtils()->isFileExist(plistPath))
+	{
+		SpriteFrameCache::sharedSpriteFrameCache()->addSpriteFramesWithFile(plistPath.c_str());
+	}
+	else
+	{
+		string altPlist = format("Unit/Ninja/{}/{}.plist", guardianName, guardianName);
+		if (FileUtils::sharedFileUtils()->isFileExist(altPlist))
+		{
+			SpriteFrameCache::sharedSpriteFrameCache()->addSpriteFramesWithFile(altPlist.c_str());
+		}
+	}
+
 	auto guardian = Provider::create(guardianName, Role::Com, guardianGroup);
+	if (!guardian)
+	{
+		CCLOG("Gagal membuat Guardian: %s", guardianName.c_str());
+		return;
+	}
+
 
 	if (guardianGroup == Group::Akatsuki)
 	{
@@ -344,9 +365,11 @@ void GameLayer::spawnNetworkGuardian(const string &guardianName, Group guardianG
 		guardian->_isRemoteControlled = true;
 		guardian->setWalkSpeed(0);
 	}
-
 	_CharacterArray.push_back(guardian);
-	_hudLayer->addMapIcon();
+	if (_hudLayer)
+	{
+		_hudLayer->addMapIcon();
+	}
 
 	_hasSpawnedGuardian = (_hasSpawnedKonohaGuardian && _hasSpawnedAkatsukiGuardian);
 }
