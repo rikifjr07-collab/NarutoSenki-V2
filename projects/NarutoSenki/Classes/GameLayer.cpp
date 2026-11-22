@@ -896,19 +896,19 @@ void GameLayer::updateNetworkSync(float dt)
 						break;
 					}
 
-					float oldX = hero->getPositionX();
-					float oldY = hero->getPositionY();
-					float dist = ccpDistance(Vec2(oldX, oldY), Vec2(st.x, st.y));
-					if (dist > 150.0f || dist < 1.0f)
-						hero->setPosition(Vec2(st.x, st.y));
-					else
-						hero->setPosition(Vec2(oldX + (st.x - oldX) * 0.55f, oldY + (st.y - oldY) * 0.55f));
+										// Ganti blok oldX/oldY/dist dengan ini:
+					hero->_netTargetPos = Vec2(st.x, st.y);
+					if (!hero->_hasNetTarget)
+					{
+						hero->_hasNetTarget = true;
+						hero->setPosition(hero->_netTargetPos);
+					}
 
 					hero->_isFlipped = st.isFlipped;
 					hero->setFlipX(st.isFlipped);
-					hero->setZOrder(-hero->getPositionY());
 					hero->setHPValue(st.hp, false);
 
+					float dist = ccpDistance(hero->getPosition(), hero->_netTargetPos);
 					if (st.attackSeq > hero->_netAttackSeq && st.lastAttack >= 0)
 					{
 						hero->_netAttackSeq = st.attackSeq;
@@ -917,15 +917,19 @@ void GameLayer::updateNetworkSync(float dt)
 						else
 							hero->attack((ABType)st.lastAttack);
 					}
-					else if (st.state == (int)State::WALK || dist > 1.5f)
+					else if (st.state == (int)State::WALK || dist > 3.0f)
 					{
 						if (hero->getState() == State::IDLE)
+						{
 							hero->walk(Vec2(st.isFlipped ? -1.0f : 1.0f, 0.0f));
+							hero->setWalkSpeed(0);
+						}
 					}
 					else if (st.state == (int)State::IDLE && hero->getState() == State::WALK)
 					{
 						hero->idle();
 					}
+
 					break;
 				}
 			}
@@ -948,32 +952,35 @@ void GameLayer::updateNetworkSync(float dt)
 					continue;
 				}
 
-				float oldX = f->getPositionX();
-				float oldY = f->getPositionY();
-				float dist = ccpDistance(Vec2(oldX, oldY), Vec2(fs.x, fs.y));
-				if (dist > 150.0f || dist < 1.0f)
-					f->setPosition(Vec2(fs.x, fs.y));
-				else
-					f->setPosition(Vec2(oldX + (fs.x - oldX) * 0.55f, oldY + (fs.y - oldY) * 0.55f));
+								f->_netTargetPos = Vec2(fs.x, fs.y);
+				if (!f->_hasNetTarget)
+				{
+					f->_hasNetTarget = true;
+					f->setPosition(f->_netTargetPos);
+				}
 
 				f->_isFlipped = fs.isFlipped;
 				f->setFlipX(fs.isFlipped);
-				f->setZOrder(-f->getPositionY());
 				f->setHPValue(fs.hp, false);
 
+				float dist = ccpDistance(f->getPosition(), f->_netTargetPos);
 				if (fs.state == (int)State::NATTACK && f->getState() != State::NATTACK)
 				{
 					f->attack(NAttack);
 				}
-				else if (fs.state == (int)State::WALK || dist > 1.5f)
+				else if (fs.state == (int)State::WALK || dist > 3.0f)
 				{
 					if (f->getState() == State::IDLE)
+					{
 						f->walk(Vec2(fs.isFlipped ? -1.0f : 1.0f, 0.0f));
+						f->setWalkSpeed(0);
+					}
 				}
 				else if (fs.state == (int)State::IDLE && f->getState() == State::WALK)
 				{
 					f->idle();
 				}
+
 			}
 		}
 
@@ -1028,33 +1035,36 @@ void GameLayer::updateNetworkSync(float dt)
 							break;
 						}
 
-						float oldX = mo->getPositionX();
-						float oldY = mo->getPositionY();
-						float dist = ccpDistance(Vec2(oldX, oldY), Vec2(ms.x, ms.y));
-						if (dist > 150.0f || dist < 1.0f)
-							mo->setPosition(Vec2(ms.x, ms.y));
-						else
-							mo->setPosition(Vec2(oldX + (ms.x - oldX) * 0.55f, oldY + (ms.y - oldY) * 0.55f));
+						mo->_netTargetPos = Vec2(ms.x, ms.y);
+						if (!mo->_hasNetTarget)
+						{
+							mo->_hasNetTarget = true;
+							mo->setPosition(mo->_netTargetPos);
+						}
 
 						mo->_isFlipped = ms.isFlipped;
 						mo->setFlipX(ms.isFlipped);
-						mo->setZOrder(-mo->getPositionY());
 						if (ms.maxHp > 0)
 							mo->setHPValue(ms.hp, false);
 
+						float dist = ccpDistance(mo->getPosition(), mo->_netTargetPos);
 						if (ms.state == (int)State::NATTACK && mo->getState() != State::NATTACK)
 						{
 							mo->attack(NAttack);
 						}
-						else if (ms.state == (int)State::WALK || dist > 1.5f)
+						else if (ms.state == (int)State::WALK || dist > 3.0f)
 						{
 							if (mo->getState() == State::IDLE)
+							{
 								mo->walk(Vec2(ms.isFlipped ? -1.0f : 1.0f, 0.0f));
+								mo->setWalkSpeed(0);
+							}
 						}
 						else if (ms.state == (int)State::IDLE && mo->getState() == State::WALK)
 						{
 							mo->idle();
 						}
+
 					}
 					break;
 				}
@@ -1219,7 +1229,13 @@ void GameLayer::attackButtonClick(ABType type)
         float faceDir = currentPlayer->_isFlipped ? -1.0f : 1.0f;
         LanManager::getInstance()->sendClientInput(
             faceDir, 0, (int)type, currentPlayer->getPositionX(), currentPlayer->getPositionY(), currentPlayer->_isFlipped);
-    }
+
+        if (type == OUGIS1 || type == OUGIS2)
+        {
+            LanManager::getInstance()->sendClientInput(
+                faceDir, 0, (int)type, currentPlayer->getPositionX(), currentPlayer->getPositionY(), currentPlayer->_isFlipped);
+        }
+	}
 
     if (type == Item1)
     {
