@@ -317,9 +317,30 @@ void CharacterBase::update(float dt)
 			}
 		}
 	}
-
-	if (_state == State::WALK)
+    	// Tambahkan blok interpolasi 60 FPS ini tepat SEBELUM "if (_state == State::WALK)"
+	if (LanManager::getInstance()->isClient() && !isPlayer() && _hasNetTarget && _state != State::DEAD)
 	{
+		float dist = ccpDistance(getPosition(), _netTargetPos);
+		if (dist > 150.0f)
+		{
+			setPosition(_netTargetPos);
+		}
+		else if (dist > 0.5f)
+		{
+			float smooth = MIN(1.0f, dt * 20.0f);
+			Vec2 nextPos = getPosition().lerp(_netTargetPos, smooth);
+			setPosition(nextPos);
+		}
+		getGameLayer()->reorderChild(this, -getPositionY());
+		if (isPlayerOrCom())
+		{
+			CCNotificationCenter::sharedNotificationCenter()->postNotification("updateMap", this);
+		}
+	}
+	else if (_state == State::WALK)
+	{
+		// ... (biarkan kode asli _state == State::WALK di dalam sini tetap utuh) ...
+
 		_desiredPosition = getPosition() + (_velocity * dt);
 
 		if (isPlayer() && !_isAI && !_isInvincible && !_isArmored)
