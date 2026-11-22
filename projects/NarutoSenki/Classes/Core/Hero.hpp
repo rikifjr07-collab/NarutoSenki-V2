@@ -313,6 +313,11 @@ public:
 
 	void setHPbar()
 	{
+		if (_hpBar)
+		{
+			_hpBar->removeFromParent();
+			_hpBar = nullptr;
+		}
 		if (getGameLayer()->playerGroup != getGroup())
 		{
 			_hpBar = HPBar::create("hp_bar_r.png");
