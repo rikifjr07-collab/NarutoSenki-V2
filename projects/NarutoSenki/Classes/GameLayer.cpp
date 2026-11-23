@@ -314,18 +314,16 @@ void GameLayer::spawnNetworkGuardian(const string &guardianName, Group guardianG
 	}
 
 	// 1. Pastikan aset sprite Guardian (Roshi / Han) sudah dimuat ke SpriteFrameCache agar tidak FC!
-	string plistPath = format("Unit/Guardian/{}/{}.plist", guardianName, guardianName);
-	if (FileUtils::sharedFileUtils()->isFileExist(plistPath))
+		// Gunakan konstanta resmi kGuardian_Roshi dan kGuardian_Han dari Defines.h!
+	if (guardianName == GuardianEnum::Roshi)
 	{
-		SpriteFrameCache::sharedSpriteFrameCache()->addSpriteFramesWithFile(plistPath.c_str());
+		addSprites(kGuardian_Roshi);
+		KTools::prepareFileOGG(GuardianEnum::Roshi);
 	}
-	else
+	else if (guardianName == GuardianEnum::Han)
 	{
-		string altPlist = format("Unit/Ninja/{}/{}.plist", guardianName, guardianName);
-		if (FileUtils::sharedFileUtils()->isFileExist(altPlist))
-		{
-			SpriteFrameCache::sharedSpriteFrameCache()->addSpriteFramesWithFile(altPlist.c_str());
-		}
+		addSprites(kGuardian_Han);
+		KTools::prepareFileOGG(GuardianEnum::Han);
 	}
 
 	auto guardian = Provider::create(guardianName, Role::Com, guardianGroup);
