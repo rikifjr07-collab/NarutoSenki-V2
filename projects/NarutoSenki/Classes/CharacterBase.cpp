@@ -4503,9 +4503,10 @@ void CharacterBase::dead()
 	// kill all buffEffect
 	if (isPlayerOrCom())
 	{
-		if (LanManager::getInstance()->isHost() && isNotGuardian() && !_hasReportedDeath)
+		if (LanManager::getInstance()->isHost() && isNotGuardian() && _state != State::DEAD && !_hasReportedDeath)
 		{
 			_hasReportedDeath = true;
+			_state = State::DEAD; // Langsung kunci state DEAD di sini agar tidak pernah masuk 2x!
 			CharacterBase *killer = _slayer ? (_slayer->_master ? _slayer->_master : _slayer) : nullptr;
 			string killerName = killer ? killer->getName() : "Tower";
 			int streak = 1;
