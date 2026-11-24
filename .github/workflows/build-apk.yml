@@ -32,6 +32,28 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/21.4.7075529" >> $GITHUB_ENV
           echo "NDK_ROOT=$ANDROID_HOME/ndk/21.4.7075529" >> $GITHUB_ENV
 
+      - name: Build OpenSSL for Android (arm64-v8a)
+        run: |
+          OPENSSL_DIR="$GITHUB_WORKSPACE/cocos2dx/platform/third_party/android/prebuilt/openssl"
+          mkdir -p "$OPENSSL_DIR/libs/arm64-v8a"
+          
+          cd /tmp
+          wget -q https://openssl.org
+          tar -xzf openssl-1.1.1w.tar.gz
+          cd openssl-1.1.1w
+          
+          export ANDROID_NDK_ROOT=$ANDROID_NDK_HOME
+          export PATH=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
+          
+          ./Configure android-arm64 -D__ANDROID_API__=21 no-shared no-tests
+          make -j$(nproc) build_libs
+          
+          cp -r include "$OPENSSL_DIR/"
+          cp libcrypto.a libssl.a "$OPENSSL_DIR/libs/arm64-v8a/"
+          
+          # Bersihkan source build OpenSSL agar hemat ruang disk
+          rm -rf /tmp/openssl-1.1.1w*
+
       - name: Setup Java JDK 8 (Untuk Gradle)
         uses: actions/setup-java@v4
         with:
