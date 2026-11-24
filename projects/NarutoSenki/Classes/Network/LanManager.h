@@ -127,7 +127,9 @@ private:
 	void broadcastLobbyState();
 	void parseLobbyPacket(const string &packet);
 
-	int _sock = -1;
+		int _sock = -1;
+	void* _sslCtx = nullptr;
+	void* _ssl = nullptr;
 	std::mutex _sendMutex;
 	bool _wsConnected = false;
 	bool _channelSubscribed = false;
