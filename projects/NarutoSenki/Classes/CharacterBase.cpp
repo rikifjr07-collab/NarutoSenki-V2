@@ -1368,7 +1368,52 @@ void CharacterBase::setDamage(CharacterBase *attacker, const string &effectType,
 #if COCOS2D_DEBUG
 	Debug::PrintDamgeInfo(this, attacker, currentAttacker, attackValue, realValue, effectType);
 #endif
-	setHPValue(getHP() <= realValue ? 0 : getHP() - realValue);
+	uint32_t oldHP = getHP();
+	uint32_t newHP = (oldHP <= realValue) ? 0 : (oldHP - realValue);
+	setHPValue(newHP);
+
+	// Hanya hitung & umumkan kill TEPAT SAAT darah berubah dari > 0 menjadi 0!
+	if (oldHP > 0 && newHP == 0 && isPlayerOrCom() && isNotGuardian() && !_hasReportedDeath)
+	{
+		if (LanManager::getInstance()->isHost())
+		{
+			_hasReportedDeath = true;
+			CharacterBase *killer = attacker ? (attacker->_master ? attacker->_master : attacker) : nullptr;
+			string killerName = killer ? killer->getName() : "Tower";
+			int streak = 1;
+			if (killer && killer->isPlayerOrCom())
+			{
+				killer->setKillNum(killer->getKillNum() + 1);
+				streak = killer->getKillNum();
+			}
+
+			int kKills = 0;
+			int aKills = 0;
+			for (auto h : getGameLayer()->_CharacterArray)
+			{
+				if (h && h->isPlayerOrCom() && h->isNotGuardian())
+				{
+					if (h->isKonohaGroup())
+						kKills += h->getKillNum();
+					else
+						aKills += h->getKillNum();
+				}
+			}
+
+			getGameLayer()->setReport(killerName, getName(), streak);
+			if (getGameLayer()->getHudLayer())
+			{
+				if (getGameLayer()->getHudLayer()->KonoLabel)
+					getGameLayer()->getHudLayer()->KonoLabel->setString(to_cstr(kKills));
+				if (getGameLayer()->getHudLayer()->AkaLabel)
+					getGameLayer()->getHudLayer()->AkaLabel->setString(to_cstr(aKills));
+				if (killer == getGameLayer()->currentPlayer && getGameLayer()->getHudLayer()->killLabel)
+					getGameLayer()->getHudLayer()->killLabel->setString(to_cstr(killer->getKillNum()));
+			}
+			LanManager::getInstance()->broadcastKillEvent(killerName, getName(), streak, kKills, aKills);
+		}
+	}
+
 
 	if (isClone() && _master && !_master->_isControlled)
 	{
