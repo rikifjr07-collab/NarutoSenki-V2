@@ -1,17 +1,19 @@
 #include "LanManager.h"
 #include "Core/Provider.hpp"
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <netdb.h>
+#include <unistd.h>
 #include <sstream>
 #include <chrono>
 #include <cstring>
 #include <cstdlib>
 #include <ctime>
 
-using namespace cocos2d;
-using namespace cocos2d::extension;
-
+static const string APINATOR_HOST    = "ws-us.apinator.io";
 static const string APINATOR_KEY     = "app_7d6ca9a2be2744b70e2a95f3824f7d9d671562ed";
 static const string APINATOR_SECRET  = "f876dc1769e25a3d8dac1218d0b7659795ac5cc1128337b85309b82f4854c143";
-static const string APINATOR_CLUSTER = "us";
 
 namespace {
     static const uint32_t k256[64] = {
@@ -78,7 +80,7 @@ namespace {
         uint8_t innerHash[32];
         sha256Raw(iKeyMsg.data(), iKeyMsg.size(), innerHash);
 
-        uint8_t outerBuf[64 + 32];
+        uint8_t outerBuf[96];
         memcpy(outerBuf, oKeyPad, 64);
         memcpy(outerBuf + 64, innerHash, 32);
         uint8_t finalHash[32];
@@ -88,6 +90,15 @@ namespace {
         for (int i = 0; i < 32; i++) sprintf(hexOut + i * 2, "%02x", finalHash[i]);
         hexOut[64] = '\0';
         return string(hexOut);
+    }
+    bool recvExact(int fd, uint8_t* buf, size_t len) {
+        size_t got = 0;
+        while (got < len) {
+            int n = recv(fd, (char*)(buf + got), len - got, 0);
+            if (n <= 0) return false;
+            got += n;
+        }
+        return true;
     }
 
     string escapeJson(const string& s) {
@@ -166,6 +177,7 @@ namespace {
         return "";
     }
 }
+
 static LanManager *s_lanInstance = nullptr;
 
 LanManager *LanManager::getInstance()
@@ -215,7 +227,6 @@ int LanManager::getMySlotIndex()
 	}
 	return 0;
 }
-
 void LanManager::disconnect()
 {
 	_running = false;
@@ -230,11 +241,11 @@ void LanManager::disconnect()
     _roomCode = "";
     _nextPlayerId = 2;
 
-	if (_ws)
+	if (_sock >= 0)
 	{
-		WebSocket* oldWs = _ws;
-		_ws = nullptr;
-		oldWs->close();
+		shutdown(_sock, SHUT_RDWR);
+		close(_sock);
+		_sock = -1;
 	}
 
 	std::lock_guard<std::mutex> lock(_dataMutex);
@@ -269,17 +280,7 @@ bool LanManager::startHost()
 		_statusMsg = "Menghubungkan Server...";
 	}
 
-	string url = format("ws://ws-{}.apinator.io/app/{}", APINATOR_CLUSTER, APINATOR_KEY);
-	_ws = new WebSocket();
-	if (!_ws->init(*this, url))
-	{
-		delete _ws;
-		_ws = nullptr;
-		_isHost = false;
-		_running = false;
-		_statusMsg = "Gagal Init WebSocket";
-		return false;
-	}
+	std::thread(&LanManager::networkThreadLoop, this).detach();
 	return true;
 }
 
@@ -307,31 +308,179 @@ bool LanManager::joinHost(const string &roomCodeOrIp)
 		_statusMsg = "Masuk Room " + _roomCode + "...";
 	}
 
-	string url = format("ws://ws-{}.apinator.io/app/{}", APINATOR_CLUSTER, APINATOR_KEY);
-	_ws = new WebSocket();
-	if (!_ws->init(*this, url))
+	std::thread(&LanManager::networkThreadLoop, this).detach();
+	return true;
+}
+
+bool LanManager::sendWsFrame(const string &text)
+{
+	std::lock_guard<std::mutex> lock(_sendMutex);
+	if (_sock < 0 || !_wsConnected) return false;
+
+	size_t len = text.size();
+	std::vector<uint8_t> frame;
+	frame.reserve(len + 14);
+
+	frame.push_back(0x81);
+	if (len <= 125)
 	{
-		delete _ws;
-		_ws = nullptr;
-		_isClient = false;
-		_running = false;
-		_statusMsg = "Gagal Init WebSocket";
-		return false;
+		frame.push_back(0x80 | (uint8_t)len);
+	}
+	else if (len <= 65535)
+	{
+		frame.push_back(0x80 | 126);
+		frame.push_back((len >> 8) & 0xff);
+		frame.push_back(len & 0xff);
+	}
+	else
+	{
+		frame.push_back(0x80 | 127);
+		for (int i = 7; i >= 0; i--)
+			frame.push_back(((uint64_t)len >> (i * 8)) & 0xff);
+	}
+
+	uint8_t mask[4] = {0x37, 0x91, 0x4b, 0xc2};
+	frame.insert(frame.end(), mask, mask + 4);
+
+	for (size_t i = 0; i < len; i++)
+		frame.push_back((uint8_t)text[i] ^ mask[i % 4]);
+
+	size_t sent = 0;
+	while (sent < frame.size())
+	{
+		int n = send(_sock, (const char*)(frame.data() + sent), frame.size() - sent, 0);
+		if (n <= 0) return false;
+		sent += n;
 	}
 	return true;
 }
 
-void LanManager::onOpen(WebSocket* ws)
+void LanManager::networkThreadLoop()
 {
-	if (ws != _ws) return;
-	_wsConnected = true;
-	std::lock_guard<std::mutex> lock(_dataMutex);
-	_statusMsg = "Otentikasi Room...";
-}
+	addrinfo hints{}, *res = nullptr;
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
 
-void LanManager::onClose(WebSocket* ws)
-{
-	if (ws == _ws)
+	if (getaddrinfo(APINATOR_HOST.c_str(), "80", &hints, &res) != 0 || !res)
+	{
+		std::lock_guard<std::mutex> lock(_dataMutex);
+		_statusMsg = "Gagal DNS Server";
+		_isHost = false;
+		_isClient = false;
+		return;
+	}
+
+	int fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+	if (fd < 0)
+	{
+		freeaddrinfo(res);
+		std::lock_guard<std::mutex> lock(_dataMutex);
+		_statusMsg = "Gagal Buat Socket";
+		_isHost = false;
+		_isClient = false;
+		return;
+	}
+
+	int flag = 1;
+	setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(int));
+
+	if (connect(fd, res->ai_addr, res->ai_addrlen) < 0)
+	{
+		close(fd);
+		freeaddrinfo(res);
+		std::lock_guard<std::mutex> lock(_dataMutex);
+		_statusMsg = "Gagal Terhubung Server";
+		_isHost = false;
+		_isClient = false;
+		return;
+	}
+	freeaddrinfo(res);
+	_sock = fd;
+
+	string req =
+		"GET /app/" + APINATOR_KEY + " HTTP/1.1\r\n"
+		"Host: " + APINATOR_HOST + "\r\n"
+		"Upgrade: websocket\r\n"
+		"Connection: Upgrade\r\n"
+		"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+		"Sec-WebSocket-Version: 13\r\n\r\n";
+
+	if (send(fd, req.c_str(), req.size(), 0) <= 0) { disconnect(); return; }
+
+	string respHeader;
+	char ch;
+	while (_running && respHeader.find("\r\n\r\n") == string::npos)
+	{
+		if (recv(fd, &ch, 1, 0) <= 0) { disconnect(); return; }
+		respHeader += ch;
+		if (respHeader.size() > 4096) { disconnect(); return; }
+	}
+
+	if (respHeader.find("101") == string::npos)
+	{
+		std::lock_guard<std::mutex> lock(_dataMutex);
+		_statusMsg = "Ditolak Server (Non-101)";
+		_isHost = false;
+		_isClient = false;
+		return;
+	}
+
+	_wsConnected = true;
+	{
+		std::lock_guard<std::mutex> lock(_dataMutex);
+		_statusMsg = "Otentikasi Room...";
+	}
+
+	while (_running && _sock >= 0)
+	{
+		uint8_t hdr[2];
+		if (!recvExact(fd, hdr, 2)) break;
+
+		uint8_t opcode = hdr[0] & 0x0f;
+		bool masked = (hdr[0] & 0x80) != 0;
+		uint64_t payloadLen = hdr[1] & 0x7f;
+
+		if (payloadLen == 126)
+		{
+			uint8_t ext[2];
+			if (!recvExact(fd, ext, 2)) break;
+			payloadLen = (ext[0] << 8) | ext[1];
+		}
+		else if (payloadLen == 127)
+		{
+			uint8_t ext[8];
+			if (!recvExact(fd, ext, 8)) break;
+			payloadLen = 0;
+			for (int i = 0; i < 8; i++) payloadLen = (payloadLen << 8) | ext[i];
+		}
+
+		uint8_t maskKey[4] = {0};
+		if (masked && !recvExact(fd, maskKey, 4)) break;
+
+		if (payloadLen > 1024 * 512) break;
+		std::vector<uint8_t> payload(payloadLen);
+		if (payloadLen > 0 && !recvExact(fd, payload.data(), payloadLen)) break;
+
+		if (masked)
+		{
+			for (size_t i = 0; i < payloadLen; i++) payload[i] ^= maskKey[i % 4];
+		}
+
+		if (opcode == 0x8) break;
+		else if (opcode == 0x9)
+		{
+			std::lock_guard<std::mutex> lock(_sendMutex);
+			uint8_t pong[6] = {0x8A, 0x80, 0x11, 0x22, 0x33, 0x44};
+			send(fd, (const char*)pong, 6, 0);
+		}
+		else if (opcode == 0x1)
+		{
+			string msg((const char*)payload.data(), payloadLen);
+			handleWsMessage(msg);
+		}
+	}
+
+	if (_running)
 	{
 		_wsConnected = false;
 		_channelSubscribed = false;
@@ -340,22 +489,9 @@ void LanManager::onClose(WebSocket* ws)
 		std::lock_guard<std::mutex> lock(_dataMutex);
 		_statusMsg = "Koneksi Terputus";
 	}
-	delete ws;
 }
-
-void LanManager::onError(WebSocket* ws, const WebSocket::ErrorCode& error)
+void LanManager::handleWsMessage(const string &rawMsg)
 {
-	if (ws == _ws)
-	{
-		std::lock_guard<std::mutex> lock(_dataMutex);
-		_statusMsg = "Gagal Terhubung Server";
-	}
-}
-void LanManager::onMessage(WebSocket* ws, const WebSocket::Data& data)
-{
-	if (ws != _ws || !data.bytes || data.len <= 0) return;
-	string rawMsg(data.bytes, data.len);
-
 	string eventName = extractJsonField(rawMsg, "event");
 	string eventData = extractJsonField(rawMsg, "data");
 
@@ -371,7 +507,7 @@ void LanManager::onMessage(WebSocket* ws, const WebSocket::Data& data)
 
 			string subJson = format("{\"event\":\"subscribe\",\"data\":{\"channel\":\"{}\",\"auth\":\"{}\"}}",
 									channelName, authString);
-			_ws->send(subJson);
+			sendWsFrame(subJson);
 		}
 	}
 	else if (eventName == "subscription_succeeded")
@@ -403,11 +539,11 @@ void LanManager::onMessage(WebSocket* ws, const WebSocket::Data& data)
 
 void LanManager::sendApinatorEvent(const string &eventName, const string &payloadData)
 {
-	if (!_ws || !_wsConnected || !_channelSubscribed) return;
+	if (!_wsConnected || !_channelSubscribed) return;
 	string channelName = "private-room-" + _roomCode;
 	string json = format("{\"event\":\"{}\",\"channel\":\"{}\",\"data\":{{\"p\":\"{}\"}}}",
 						 eventName, channelName, escapeJson(payloadData));
-	_ws->send(json);
+	sendWsFrame(json);
 }
 
 void LanManager::sendGamePacket(const string &rawPacket)
@@ -540,32 +676,18 @@ void LanManager::processGamePacket(const string &taggedPkt)
 				}
 			}
 		}
-		else if (pkt.find("LOBBY:") == 0)
-		{
-			parseLobbyPacket(pkt.substr(6));
-		}
-		else if (pkt.find("START") == 0)
-		{
-			_gameStarted = true;
-		}
-		else if (pkt.find("OVER:") == 0)
-		{
-			_winnerGroup = atoi(pkt.substr(5).c_str());
-		}
+		else if (pkt.find("LOBBY:") == 0) { parseLobbyPacket(pkt.substr(6)); }
+		else if (pkt.find("START") == 0) { _gameStarted = true; }
+		else if (pkt.find("OVER:") == 0) { _winnerGroup = atoi(pkt.substr(5).c_str()); }
 		else if (pkt.find("KILL:") == 0)
 		{
-			char kBuf[64] = {0};
-			char dBuf[64] = {0};
+			char kBuf[64] = {0}, dBuf[64] = {0};
 			int streak = 1, kKills = 0, aKills = 0;
 			if (sscanf(pkt.c_str() + 5, "%63[^,],%63[^,],%d,%d,%d", kBuf, dBuf, &streak, &kKills, &aKills) == 5)
 			{
 				std::lock_guard<std::mutex> lock(_dataMutex);
-				_lastKillerName = kBuf;
-				_lastDeadName = dBuf;
-				_lastKillStreak = streak;
-				_konohaKills = kKills;
-				_akatsukiKills = aKills;
-				_hasNewKillReport = true;
+				_lastKillerName = kBuf; _lastDeadName = dBuf; _lastKillStreak = streak;
+				_konohaKills = kKills; _akatsukiKills = aKills; _hasNewKillReport = true;
 			}
 		}
 		else if (pkt.find("GARD:") == 0)
@@ -575,9 +697,7 @@ void LanManager::processGamePacket(const string &taggedPkt)
 			if (sscanf(pkt.c_str() + 5, "%63[^,],%d", gBuf, &grp) == 2)
 			{
 				std::lock_guard<std::mutex> lock(_dataMutex);
-				_spawnedGuardName = gBuf;
-				_spawnedGuardGroup = grp;
-				_hasNewGuardian = true;
+				_spawnedGuardName = gBuf; _spawnedGuardGroup = grp; _hasNewGuardian = true;
 			}
 		}
 		else if (pkt.find("PONG:") == 0)
@@ -600,8 +720,7 @@ void LanManager::processGamePacket(const string &taggedPkt)
 				if (sscanf(seg.c_str(), "%d,%f,%f,%d,%d,%u,%u,%d,%d,%d",
 						   &h.charId, &h.x, &h.y, &flip, &h.state, &h.hp, &h.maxHp, &h.lastAttack, &h.attackSeq, &stick) == 10)
 				{
-					h.isFlipped = (flip == 1);
-					h.isSticking = (stick == 1);
+					h.isFlipped = (flip == 1); h.isSticking = (stick == 1);
 					list.push_back(h);
 				}
 			}
@@ -634,10 +753,7 @@ void LanManager::processGamePacket(const string &taggedPkt)
 			while (std::getline(ss, seg, ';'))
 			{
 				NetTowerSync t{};
-				if (sscanf(seg.c_str(), "%d,%u,%u", &t.charId, &t.hp, &t.maxHp) == 3)
-				{
-					list.push_back(t);
-				}
+				if (sscanf(seg.c_str(), "%d,%u,%u", &t.charId, &t.hp, &t.maxHp) == 3) list.push_back(t);
 			}
 			std::lock_guard<std::mutex> lock(_dataMutex);
 			_latestTowerState = list;
@@ -658,8 +774,7 @@ void LanManager::processGamePacket(const string &taggedPkt)
 					if (sscanf(seg.c_str(), "%d,%d,%63[^,],%f,%f,%d,%d,%u,%u",
 							   &m.masterCharId, &m.monIndex, nameBuf, &m.x, &m.y, &flip, &m.state, &m.hp, &m.maxHp) == 9)
 					{
-						m.name = nameBuf;
-						m.isFlipped = (flip == 1);
+						m.name = nameBuf; m.isFlipped = (flip == 1);
 						list.push_back(m);
 					}
 				}
@@ -669,7 +784,6 @@ void LanManager::processGamePacket(const string &taggedPkt)
 		}
 	}
 }
-
 void LanManager::broadcastLobbyState()
 {
 	if (!_isHost) return;
@@ -826,14 +940,8 @@ vector<NetHeroSync> LanManager::getLatestWorldState()
 void LanManager::notifySurrender(int myGroup)
 {
 	int enemyGroup = (myGroup == 0) ? 1 : 0;
-	if (_isHost)
-	{
-		broadcastGameOver(enemyGroup);
-	}
-	else if (_isClient)
-	{
-		sendGamePacket(format("SURRENDER:{}", myGroup));
-	}
+	if (_isHost) broadcastGameOver(enemyGroup);
+	else if (_isClient) sendGamePacket(format("SURRENDER:{}", myGroup));
 }
 
 void LanManager::broadcastGameOver(int winnerGroup)
@@ -953,4 +1061,3 @@ bool LanManager::popGuardianSpawn(string &guardName, int &group)
     _hasNewGuardian = false;
     return true;
 }
-
