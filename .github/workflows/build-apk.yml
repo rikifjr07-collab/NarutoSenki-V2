@@ -32,13 +32,13 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/21.4.7075529" >> $GITHUB_ENV
           echo "NDK_ROOT=$ANDROID_HOME/ndk/21.4.7075529" >> $GITHUB_ENV
 
-      - name: Build OpenSSL for Android (arm64-v8a)
+            - name: Build OpenSSL for Android (arm64-v8a)
         run: |
           OPENSSL_DIR="$GITHUB_WORKSPACE/cocos2dx/platform/third_party/android/prebuilt/openssl"
           mkdir -p "$OPENSSL_DIR/libs/arm64-v8a"
           
           cd /tmp
-          wget -q https://openssl.org
+          curl -fL -o openssl-1.1.1w.tar.gz https://github.com
           tar -xzf openssl-1.1.1w.tar.gz
           cd openssl-1.1.1w
           
@@ -53,6 +53,7 @@ jobs:
           
           # Bersihkan source build OpenSSL agar hemat ruang disk
           rm -rf /tmp/openssl-1.1.1w*
+
 
       - name: Setup Java JDK 8 (Untuk Gradle)
         uses: actions/setup-java@v4
