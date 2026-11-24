@@ -118,6 +118,7 @@ bool LanManager::startHost()
 	listen(_tcpSocket, 5);
 
 	_udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
+	setsockopt(_udpSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 	sockaddr_in udpAddr{};
 	udpAddr.sin_family = AF_INET;
 	udpAddr.sin_addr.s_addr = INADDR_ANY;
@@ -167,6 +168,7 @@ bool LanManager::joinHost(const string &ipAddress)
 	}
 
 	_udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
+	int opt = 1; setsockopt(_udpSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 	sockaddr_in udpAddr{};
 	udpAddr.sin_family = AF_INET;
 	udpAddr.sin_addr.s_addr = INADDR_ANY;
