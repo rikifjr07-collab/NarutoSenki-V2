@@ -2,6 +2,7 @@
 #include "GameLayer.h"
 #include "Core/Hero.hpp"
 #include "GameMode/GameModeImpl.h"
+#include "Network/LanManager.h"
 
 GameOver::GameOver()
 {
@@ -476,6 +477,11 @@ void GameOver::listResult()
 	getGameLayer()->_isSurrender = false;
 
 	getGameModeHandler()->onGameOver();
+
+	if (LanManager::getInstance()->isMultiplayer())
+	{
+		LanManager::getInstance()->disconnect();
+	}
 }
 
 void GameOver::onUPloadBtn(Ref *sender)
