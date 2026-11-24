@@ -5,6 +5,8 @@
 #include <netinet/tcp.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 #include <sstream>
 #include <chrono>
 #include <cstring>
@@ -91,15 +93,15 @@ namespace {
         hexOut[64] = '\0';
         return string(hexOut);
     }
-    bool recvExact(int fd, uint8_t* buf, size_t len) {
+    bool recvExactSsl(SSL* ssl, uint8_t* buf, size_t len) {
         size_t got = 0;
         while (got < len) {
-            int n = recv(fd, (char*)(buf + got), len - got, 0);
+            int n = SSL_read(ssl, buf + got, len - got);
             if (n <= 0) return false;
             got += n;
         }
         return true;
-    }
+	}
 
     string escapeJson(const string& s) {
         string out;
@@ -241,6 +243,17 @@ void LanManager::disconnect()
     _roomCode = "";
     _nextPlayerId = 2;
 
+	if (_ssl)
+	{
+		SSL_shutdown((SSL*)_ssl);
+		SSL_free((SSL*)_ssl);
+		_ssl = nullptr;
+	}
+	if (_sslCtx)
+	{
+		SSL_CTX_free((SSL_CTX*)_sslCtx);
+		_sslCtx = nullptr;
+	}
 	if (_sock >= 0)
 	{
 		shutdown(_sock, SHUT_RDWR);
@@ -315,7 +328,7 @@ bool LanManager::joinHost(const string &roomCodeOrIp)
 bool LanManager::sendWsFrame(const string &text)
 {
 	std::lock_guard<std::mutex> lock(_sendMutex);
-	if (_sock < 0 || !_wsConnected) return false;
+	if (!_ssl || !_wsConnected) return false;
 
 	size_t len = text.size();
 	std::vector<uint8_t> frame;
@@ -348,7 +361,7 @@ bool LanManager::sendWsFrame(const string &text)
 	size_t sent = 0;
 	while (sent < frame.size())
 	{
-		int n = send(_sock, (const char*)(frame.data() + sent), frame.size() - sent, 0);
+		int n = SSL_write((SSL*)_ssl, frame.data() + sent, frame.size() - sent);
 		if (n <= 0) return false;
 		sent += n;
 	}
@@ -361,7 +374,7 @@ void LanManager::networkThreadLoop()
 	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
 
-	if (getaddrinfo(APINATOR_HOST.c_str(), "80", &hints, &res) != 0 || !res)
+	if (getaddrinfo(APINATOR_HOST.c_str(), "443", &hints, &res) != 0 || !res)
 	{
 		std::lock_guard<std::mutex> lock(_dataMutex);
 		_statusMsg = "Gagal DNS Server";
@@ -397,6 +410,30 @@ void LanManager::networkThreadLoop()
 	freeaddrinfo(res);
 	_sock = fd;
 
+	SSL_library_init();
+	SSL_CTX* ctx = SSL_CTX_new(TLS_client_method());
+	if (!ctx) { disconnect(); return; }
+	SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, nullptr);
+
+	SSL* ssl = SSL_new(ctx);
+	SSL_set_fd(ssl, fd);
+	SSL_set_tlsext_host_name(ssl, APINATOR_HOST.c_str());
+
+	if (SSL_connect(ssl) <= 0)
+	{
+		SSL_free(ssl);
+		SSL_CTX_free(ctx);
+		close(fd);
+		_sock = -1;
+		std::lock_guard<std::mutex> lock(_dataMutex);
+		_statusMsg = "Gagal Handshake TLS";
+		_isHost = false;
+		_isClient = false;
+		return;
+	}
+	_sslCtx = ctx;
+	_ssl = ssl;
+
 	string req =
 		"GET /app/" + APINATOR_KEY + " HTTP/1.1\r\n"
 		"Host: " + APINATOR_HOST + "\r\n"
@@ -405,13 +442,13 @@ void LanManager::networkThreadLoop()
 		"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
 		"Sec-WebSocket-Version: 13\r\n\r\n";
 
-	if (send(fd, req.c_str(), req.size(), 0) <= 0) { disconnect(); return; }
+	if (SSL_write(ssl, req.c_str(), req.size()) <= 0) { disconnect(); return; }
 
 	string respHeader;
 	char ch;
 	while (_running && respHeader.find("\r\n\r\n") == string::npos)
 	{
-		if (recv(fd, &ch, 1, 0) <= 0) { disconnect(); return; }
+		if (SSL_read(ssl, &ch, 1) <= 0) { disconnect(); return; }
 		respHeader += ch;
 		if (respHeader.size() > 4096) { disconnect(); return; }
 	}
@@ -419,7 +456,7 @@ void LanManager::networkThreadLoop()
 	if (respHeader.find("101") == string::npos)
 	{
 		std::lock_guard<std::mutex> lock(_dataMutex);
-		_statusMsg = "Ditolak Server (Non-101)";
+		_statusMsg = "Err: " + respHeader.substr(0, 22);
 		_isHost = false;
 		_isClient = false;
 		return;
@@ -431,10 +468,10 @@ void LanManager::networkThreadLoop()
 		_statusMsg = "Otentikasi Room...";
 	}
 
-	while (_running && _sock >= 0)
+	while (_running && _ssl)
 	{
 		uint8_t hdr[2];
-		if (!recvExact(fd, hdr, 2)) break;
+		if (!recvExactSsl(ssl, hdr, 2)) break;
 
 		uint8_t opcode = hdr[0] & 0x0f;
 		bool masked = (hdr[0] & 0x80) != 0;
@@ -443,23 +480,23 @@ void LanManager::networkThreadLoop()
 		if (payloadLen == 126)
 		{
 			uint8_t ext[2];
-			if (!recvExact(fd, ext, 2)) break;
+			if (!recvExactSsl(ssl, ext, 2)) break;
 			payloadLen = (ext[0] << 8) | ext[1];
 		}
 		else if (payloadLen == 127)
 		{
 			uint8_t ext[8];
-			if (!recvExact(fd, ext, 8)) break;
+			if (!recvExactSsl(ssl, ext, 8)) break;
 			payloadLen = 0;
 			for (int i = 0; i < 8; i++) payloadLen = (payloadLen << 8) | ext[i];
 		}
 
 		uint8_t maskKey[4] = {0};
-		if (masked && !recvExact(fd, maskKey, 4)) break;
+		if (masked && !recvExactSsl(ssl, maskKey, 4)) break;
 
 		if (payloadLen > 1024 * 512) break;
 		std::vector<uint8_t> payload(payloadLen);
-		if (payloadLen > 0 && !recvExact(fd, payload.data(), payloadLen)) break;
+		if (payloadLen > 0 && !recvExactSsl(ssl, payload.data(), payloadLen)) break;
 
 		if (masked)
 		{
@@ -471,7 +508,7 @@ void LanManager::networkThreadLoop()
 		{
 			std::lock_guard<std::mutex> lock(_sendMutex);
 			uint8_t pong[6] = {0x8A, 0x80, 0x11, 0x22, 0x33, 0x44};
-			send(fd, (const char*)pong, 6, 0);
+			SSL_write(ssl, pong, 6);
 		}
 		else if (opcode == 0x1)
 		{
@@ -490,6 +527,7 @@ void LanManager::networkThreadLoop()
 		_statusMsg = "Koneksi Terputus";
 	}
 }
+
 void LanManager::handleWsMessage(const string &rawMsg)
 {
 	string eventName = extractJsonField(rawMsg, "event");
