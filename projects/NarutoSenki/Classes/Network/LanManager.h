@@ -1,6 +1,6 @@
 #pragma once
 #include "Defines.h"
-#include "network/WebSocket.h"
+#include "cocos-ext.h"
 #include <mutex>
 #include <atomic>
 #include <vector>
