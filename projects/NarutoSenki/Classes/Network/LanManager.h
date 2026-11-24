@@ -1,6 +1,6 @@
 #pragma once
 #include "Defines.h"
-#include "cocos-ext.h"
+#include <thread>
 #include <mutex>
 #include <atomic>
 #include <vector>
@@ -17,7 +17,7 @@ struct NetPlayerInput
     int playerId = 0;
     float dirX = 0.0f;
     float dirY = 0.0f;
-    int actionType = -1;  // -1 = None/Move, 0 = NAttack, 1..5 = Skill, 6 = Item1, 99 = Idle
+    int actionType = -1;
     float posX = 0.0f;
     float posY = 0.0f;
     bool isFlipped = false;
@@ -39,7 +39,7 @@ struct NetHeroSync
 
 struct NetFlogSync
 {
-	int group = 0; // 0 = Konoha, 1 = Akatsuki
+	int group = 0;
 	int index = 0;
 	float x = 0.0f;
 	float y = 0.0f;
@@ -68,18 +68,11 @@ struct NetMonsterSync
     uint32_t maxHp = 0;
 };
 
-class LanManager : public cocos2d::extension::WebSocket::Delegate
+class LanManager
 {
 public:
 	static LanManager *getInstance();
 
-	// WebSocket Delegate Callbacks
-	virtual void onOpen(cocos2d::extension::WebSocket* ws) override;
-	virtual void onMessage(cocos2d::extension::WebSocket* ws, const cocos2d::extension::WebSocket::Data& data) override;
-	virtual void onClose(cocos2d::extension::WebSocket* ws) override;
-	virtual void onError(cocos2d::extension::WebSocket* ws, const cocos2d::extension::WebSocket::ErrorCode& error) override;
-
-	// Status Koneksi
 	bool isMultiplayer() const { return _isHost || _isClient; }
 	bool isHost() const { return _isHost; }
 	bool isClient() const { return _isClient; }
@@ -87,12 +80,10 @@ public:
 	string getStatusText();
 	string getRoomCode() const { return _roomCode; }
 
-	// Kontrol Lobby
 	bool startHost();
 	bool joinHost(const string &roomCodeOrIp);
 	void disconnect();
 
-	// Manajemen 6 Slot Fleksibel (0..2 = Konoha/Kiri, 3..5 = Akatsuki/Kanan)
 	void requestMoveSlot(int targetSlot);
 	void requestSelectHero(const string &heroName);
 	void hostStartGame();
@@ -102,7 +93,6 @@ public:
 	NetSlotData getSlot(int index);
 	int getMySlotIndex();
 
-	// Sinkronisasi Pertarungan (In-Game)
 	void sendClientInput(float dirX, float dirY, int actionType, float posX = 0.0f, float posY = 0.0f, bool isFlipped = false);
 	void broadcastWorldState(const vector<NetHeroSync> &heroes);
 	vector<NetPlayerInput> popPendingInputs();
@@ -128,13 +118,17 @@ private:
 	LanManager();
 	~LanManager();
 
+	void networkThreadLoop();
+	bool sendWsFrame(const string &text);
+	void handleWsMessage(const string &rawMsg);
 	void sendApinatorEvent(const string &eventName, const string &payloadData);
 	void sendGamePacket(const string &rawPacket);
 	void processGamePacket(const string &pkt);
 	void broadcastLobbyState();
 	void parseLobbyPacket(const string &packet);
 
-	cocos2d::extension::WebSocket* _ws = nullptr;
+	int _sock = -1;
+	std::mutex _sendMutex;
 	bool _wsConnected = false;
 	bool _channelSubscribed = false;
 	string _socketId = "";
