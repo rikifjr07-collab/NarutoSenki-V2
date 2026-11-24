@@ -40,7 +40,8 @@ LOCAL_C_INCLUDES := $(LOCAL_PATH)/../../../Classes \
 					$(LOCAL_PATH)/../../../Classes/Core \
 					$(COCOS_ROOT)/external \
 					$(COCOS_ROOT)/external/sqlite3/src \
-                    $(COCOS_ROOT)/extensions \
+					$(COCOS_ROOT)/extensions \
+					$(COCOS_ROOT)/cocos2dx/platform/third_party/android/prebuilt/libcurl/include \
     
 LOCAL_WHOLE_STATIC_LIBRARIES += cocos2dx_static
 LOCAL_WHOLE_STATIC_LIBRARIES += cocosdenshion_static
