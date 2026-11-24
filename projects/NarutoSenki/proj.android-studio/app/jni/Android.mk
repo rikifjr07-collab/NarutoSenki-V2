@@ -1,12 +1,23 @@
 LOCAL_PATH := $(call my-dir)
+COCOS_ROOT := $(LOCAL_PATH)/../../../../../
 
+# --- Prebuilt OpenSSL ---
+include $(CLEAR_VARS)
+LOCAL_MODULE := openssl_crypto_static
+LOCAL_SRC_FILES := $(COCOS_ROOT)/cocos2dx/platform/third_party/android/prebuilt/openssl/libs/$(TARGET_ARCH_ABI)/libcrypto.a
+include $(PREBUILT_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := openssl_ssl_static
+LOCAL_SRC_FILES := $(COCOS_ROOT)/cocos2dx/platform/third_party/android/prebuilt/openssl/libs/$(TARGET_ARCH_ABI)/libssl.a
+include $(PREBUILT_STATIC_LIBRARY)
+
+# --- Modul Utama Game ---
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := cocos2dcpp_shared
 
 LOCAL_MODULE_FILENAME := libcocos2dcpp
-
-COCOS_ROOT := $(LOCAL_PATH)/../../../../../
 
 LOCAL_SRC_FILES := narutosenki/main.cpp \
 	    ../../../Classes/AppDelegate.cpp \
@@ -42,12 +53,16 @@ LOCAL_C_INCLUDES := $(LOCAL_PATH)/../../../Classes \
 					$(COCOS_ROOT)/external/sqlite3/src \
 					$(COCOS_ROOT)/extensions \
 					$(COCOS_ROOT)/cocos2dx/platform/third_party/android/prebuilt/libcurl/include \
+					$(COCOS_ROOT)/cocos2dx/platform/third_party/android/prebuilt/openssl/include \
     
 LOCAL_WHOLE_STATIC_LIBRARIES += cocos2dx_static
 LOCAL_WHOLE_STATIC_LIBRARIES += cocosdenshion_static
 LOCAL_WHOLE_STATIC_LIBRARIES += cocos_lua_static
 LOCAL_WHOLE_STATIC_LIBRARIES += cocos_extension_static
 LOCAL_WHOLE_STATIC_LIBRARIES += cocos_curl_static
+
+LOCAL_STATIC_LIBRARIES += openssl_ssl_static
+LOCAL_STATIC_LIBRARIES += openssl_crypto_static
 
 include $(BUILD_SHARED_LIBRARY)
 
@@ -56,4 +71,3 @@ $(call import-module,CocosDenshion/android)
 $(call import-module,extensions)
 $(call import-module,scripting/lua/proj.android)
 $(call import-module,cocos2dx/platform/third_party/android/prebuilt/libcurl)
-
