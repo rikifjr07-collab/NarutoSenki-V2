@@ -1,6 +1,6 @@
 #pragma once
 #include "Defines.h"
-#include <thread>
+#include "network/WebSocket.h"
 #include <mutex>
 #include <atomic>
 #include <vector>
@@ -36,6 +36,7 @@ struct NetHeroSync
 	int attackSeq = 0;
     bool isSticking = false;
 };
+
 struct NetFlogSync
 {
 	int group = 0; // 0 = Konoha, 1 = Akatsuki
@@ -46,12 +47,14 @@ struct NetFlogSync
 	int state = 0;
 	uint32_t hp = 0;
 };
+
 struct NetTowerSync
 {
 	int charId = 0;
 	uint32_t hp = 0;
 	uint32_t maxHp = 0;
 };
+
 struct NetMonsterSync
 {
     int masterCharId = 0;
@@ -65,10 +68,16 @@ struct NetMonsterSync
     uint32_t maxHp = 0;
 };
 
-class LanManager
+class LanManager : public cocos2d::extension::WebSocket::Delegate
 {
 public:
 	static LanManager *getInstance();
+
+	// WebSocket Delegate Callbacks
+	virtual void onOpen(cocos2d::extension::WebSocket* ws) override;
+	virtual void onMessage(cocos2d::extension::WebSocket* ws, const cocos2d::extension::WebSocket::Data& data) override;
+	virtual void onClose(cocos2d::extension::WebSocket* ws) override;
+	virtual void onError(cocos2d::extension::WebSocket* ws, const cocos2d::extension::WebSocket::ErrorCode& error) override;
 
 	// Status Koneksi
 	bool isMultiplayer() const { return _isHost || _isClient; }
@@ -76,10 +85,11 @@ public:
 	bool isClient() const { return _isClient; }
 	int getMyPlayerId() const { return _myPlayerId; }
 	string getStatusText();
+	string getRoomCode() const { return _roomCode; }
 
 	// Kontrol Lobby
 	bool startHost();
-	bool joinHost(const string &ipAddress);
+	bool joinHost(const string &roomCodeOrIp);
 	void disconnect();
 
 	// Manajemen 6 Slot Fleksibel (0..2 = Konoha/Kiri, 3..5 = Akatsuki/Kanan)
@@ -118,11 +128,19 @@ private:
 	LanManager();
 	~LanManager();
 
-	void hostAcceptLoop();
-	void clientReceiveLoop();
-	void udpReceiveLoop();
+	void sendApinatorEvent(const string &eventName, const string &payloadData);
+	void sendGamePacket(const string &rawPacket);
+	void processGamePacket(const string &pkt);
 	void broadcastLobbyState();
 	void parseLobbyPacket(const string &packet);
+
+	cocos2d::extension::WebSocket* _ws = nullptr;
+	bool _wsConnected = false;
+	bool _channelSubscribed = false;
+	string _socketId = "";
+	string _roomCode = "";
+	string _clientTempId = "";
+	int _nextPlayerId = 2;
 
 	std::atomic<bool> _isHost{false};
 	std::atomic<bool> _isClient{false};
@@ -141,19 +159,13 @@ private:
     int _spawnedGuardGroup = 0;
 
 	int _myPlayerId = 1;
-	int _tcpSocket = -1;
-	int _udpSocket = -1;
-	string _hostIp = "";
 	string _statusMsg = "Offline";
 
 	std::mutex _dataMutex;
 	NetSlotData _slots[6];
-	vector<int> _clientSockets;
-	vector<string> _clientIps;
 	vector<NetPlayerInput> _pendingInputs;
 	vector<NetHeroSync> _latestWorldState;
     vector<NetFlogSync> _latestFlogState;
     vector<NetTowerSync> _latestTowerState;
     vector<NetMonsterSync> _latestMonsterState;
 };
-
