@@ -11,6 +11,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Pembersih Otomatis Ruang Disk & Sisa Cache
+        run: |
+          echo "=== Membersihkan ruang disk & file sementara ==="
+          rm -rf /home/runner/work/_temp/*
+          mkdir -p /home/runner/work/_temp
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk/* /opt/ghc /usr/local/share/boost || true
+          sudo apt-get clean
+          df -h
+
       - name: Checkout Source Code
         uses: actions/checkout@v4
         with:
@@ -26,7 +35,7 @@ jobs:
       - name: Setup Java JDK 8 (Untuk Gradle)
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: 'zulu'
           java-version: '8'
 
       - name: Fix Header Path fmt & Build APK
@@ -65,3 +74,9 @@ jobs:
           tag_name: v1.0.${{ github.run_number }}
           name: Naruto Senki V2 Build #${{ github.run_number }}
           files: projects/NarutoSenki/proj.android-studio/NarutoSenki-V2-Release.apk
+
+      - name: Pembersih Otomatis Setelah Build
+        if: always()
+        run: |
+          rm -rf /home/runner/work/_temp/* || true
+          rm -rf projects/NarutoSenki/proj.android-studio/app/build || true
