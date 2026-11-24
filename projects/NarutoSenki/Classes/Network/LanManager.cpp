@@ -5,7 +5,7 @@
 #include <netinet/tcp.h>
 #include <netdb.h>
 #include <unistd.h>
-#include <openssl/ssl.h>
+#include <curl/curl.h>
 #include <openssl/err.h>
 #include <sstream>
 #include <chrono>
@@ -93,12 +93,40 @@ namespace {
         hexOut[64] = '\0';
         return string(hexOut);
     }
-    bool recvExactSsl(SSL* ssl, uint8_t* buf, size_t len) {
+        bool recvExactCurl(CURL* curl, curl_socket_t sockfd, uint8_t* buf, size_t len) {
         size_t got = 0;
         while (got < len) {
-            int n = SSL_read(ssl, buf + got, len - got);
-            if (n <= 0) return false;
+            size_t n = 0;
+            CURLcode res = curl_easy_recv(curl, buf + got, len - got, &n);
+            if (res == CURLE_AGAIN) {
+                fd_set readfds;
+                FD_ZERO(&readfds);
+                FD_SET(sockfd, &readfds);
+                timeval tv{5, 0};
+                if (select((int)sockfd + 1, &readfds, nullptr, nullptr, &tv) <= 0) return false;
+                continue;
+            }
+            if (res != CURLE_OK || n == 0) return false;
             got += n;
+        }
+        return true;
+    }
+
+    bool sendExactCurl(CURL* curl, curl_socket_t sockfd, const uint8_t* buf, size_t len) {
+        size_t sent = 0;
+        while (sent < len) {
+            size_t n = 0;
+            CURLcode res = curl_easy_send(curl, buf + sent, len - sent, &n);
+            if (res == CURLE_AGAIN) {
+                fd_set writefds;
+                FD_ZERO(&writefds);
+                FD_SET(sockfd, &writefds);
+                timeval tv{5, 0};
+                if (select((int)sockfd + 1, nullptr, &writefds, nullptr, &tv) <= 0) return false;
+                continue;
+            }
+            if (res != CURLE_OK) return false;
+            sent += n;
         }
         return true;
 	}
@@ -243,22 +271,15 @@ void LanManager::disconnect()
     _roomCode = "";
     _nextPlayerId = 2;
 
-	if (_ssl)
-	{
-		SSL_shutdown((SSL*)_ssl);
-		SSL_free((SSL*)_ssl);
-		_ssl = nullptr;
-	}
-	if (_sslCtx)
-	{
-		SSL_CTX_free((SSL_CTX*)_sslCtx);
-		_sslCtx = nullptr;
-	}
 	if (_sock >= 0)
 	{
 		shutdown(_sock, SHUT_RDWR);
-		close(_sock);
 		_sock = -1;
+	}
+	if (_ssl)
+	{
+		curl_easy_cleanup((CURL*)_ssl);
+		_ssl = nullptr;
 	}
 
 	std::lock_guard<std::mutex> lock(_dataMutex);
@@ -275,7 +296,6 @@ void LanManager::disconnect()
     _hasNewKillReport = false;
 	_hasNewGuardian = false;
 }
-
 bool LanManager::startHost()
 {
 	disconnect();
@@ -328,7 +348,7 @@ bool LanManager::joinHost(const string &roomCodeOrIp)
 bool LanManager::sendWsFrame(const string &text)
 {
 	std::lock_guard<std::mutex> lock(_sendMutex);
-	if (!_ssl || !_wsConnected) return false;
+	if (!_ssl || _sock < 0 || !_wsConnected) return false;
 
 	size_t len = text.size();
 	std::vector<uint8_t> frame;
@@ -358,81 +378,51 @@ bool LanManager::sendWsFrame(const string &text)
 	for (size_t i = 0; i < len; i++)
 		frame.push_back((uint8_t)text[i] ^ mask[i % 4]);
 
-	size_t sent = 0;
-	while (sent < frame.size())
-	{
-		int n = SSL_write((SSL*)_ssl, frame.data() + sent, frame.size() - sent);
-		if (n <= 0) return false;
-		sent += n;
-	}
-	return true;
+	return sendExactCurl((CURL*)_ssl, (curl_socket_t)_sock, frame.data(), frame.size());
 }
 
 void LanManager::networkThreadLoop()
 {
-	addrinfo hints{}, *res = nullptr;
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_STREAM;
-
-	if (getaddrinfo(APINATOR_HOST.c_str(), "443", &hints, &res) != 0 || !res)
+	curl_global_init(CURL_GLOBAL_DEFAULT);
+	CURL* curl = curl_easy_init();
+	if (!curl)
 	{
 		std::lock_guard<std::mutex> lock(_dataMutex);
-		_statusMsg = "Gagal DNS Server";
+		_statusMsg = "Gagal Init CURL";
 		_isHost = false;
 		_isClient = false;
 		return;
 	}
 
-	int fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-	if (fd < 0)
+	string httpsUrl = "https://" + APINATOR_HOST + "/";
+	curl_easy_setopt(curl, CURLOPT_URL, httpsUrl.c_str());
+	curl_easy_setopt(curl, CURLOPT_CONNECT_ONLY, 1L);
+	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+	curl_easy_setopt(curl, CURLOPT_TCP_NODELAY, 1L);
+
+	CURLcode res = curl_easy_perform(curl);
+	if (res != CURLE_OK)
 	{
-		freeaddrinfo(res);
+		curl_easy_cleanup(curl);
 		std::lock_guard<std::mutex> lock(_dataMutex);
-		_statusMsg = "Gagal Buat Socket";
+		_statusMsg = string("TLS Err: ") + curl_easy_strerror(res);
 		_isHost = false;
 		_isClient = false;
 		return;
 	}
 
-	int flag = 1;
-	setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(int));
-
-	if (connect(fd, res->ai_addr, res->ai_addrlen) < 0)
+	curl_socket_t sockfd = CURL_SOCKET_BAD;
+	curl_easy_getinfo(curl, CURLINFO_ACTIVESOCKET, &sockfd);
+	if (sockfd == CURL_SOCKET_BAD)
 	{
-		close(fd);
-		freeaddrinfo(res);
-		std::lock_guard<std::mutex> lock(_dataMutex);
-		_statusMsg = "Gagal Terhubung Server";
-		_isHost = false;
-		_isClient = false;
-		return;
+		long sockLong = -1;
+		curl_easy_getinfo(curl, CURLINFO_LASTSOCKET, &sockLong);
+		sockfd = (curl_socket_t)sockLong;
 	}
-	freeaddrinfo(res);
-	_sock = fd;
 
-	SSL_library_init();
-	SSL_CTX* ctx = SSL_CTX_new(TLS_client_method());
-	if (!ctx) { disconnect(); return; }
-	SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, nullptr);
-
-	SSL* ssl = SSL_new(ctx);
-	SSL_set_fd(ssl, fd);
-	SSL_set_tlsext_host_name(ssl, APINATOR_HOST.c_str());
-
-	if (SSL_connect(ssl) <= 0)
-	{
-		SSL_free(ssl);
-		SSL_CTX_free(ctx);
-		close(fd);
-		_sock = -1;
-		std::lock_guard<std::mutex> lock(_dataMutex);
-		_statusMsg = "Gagal Handshake TLS";
-		_isHost = false;
-		_isClient = false;
-		return;
-	}
-	_sslCtx = ctx;
-	_ssl = ssl;
+	_ssl = curl;
+	_sock = (int)sockfd;
 
 	string req =
 		"GET /app/" + APINATOR_KEY + " HTTP/1.1\r\n"
@@ -442,14 +432,22 @@ void LanManager::networkThreadLoop()
 		"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
 		"Sec-WebSocket-Version: 13\r\n\r\n";
 
-	if (SSL_write(ssl, req.c_str(), req.size()) <= 0) { disconnect(); return; }
+	if (!sendExactCurl(curl, sockfd, (const uint8_t*)req.data(), req.size()))
+	{
+		disconnect();
+		return;
+	}
 
 	string respHeader;
-	char ch;
+	uint8_t ch = 0;
 	while (_running && respHeader.find("\r\n\r\n") == string::npos)
 	{
-		if (SSL_read(ssl, &ch, 1) <= 0) { disconnect(); return; }
-		respHeader += ch;
+		if (!recvExactCurl(curl, sockfd, &ch, 1))
+		{
+			disconnect();
+			return;
+		}
+		respHeader += (char)ch;
 		if (respHeader.size() > 4096) { disconnect(); return; }
 	}
 
@@ -471,7 +469,7 @@ void LanManager::networkThreadLoop()
 	while (_running && _ssl)
 	{
 		uint8_t hdr[2];
-		if (!recvExactSsl(ssl, hdr, 2)) break;
+		if (!recvExactCurl(curl, sockfd, hdr, 2)) break;
 
 		uint8_t opcode = hdr[0] & 0x0f;
 		bool masked = (hdr[0] & 0x80) != 0;
@@ -480,23 +478,23 @@ void LanManager::networkThreadLoop()
 		if (payloadLen == 126)
 		{
 			uint8_t ext[2];
-			if (!recvExactSsl(ssl, ext, 2)) break;
+			if (!recvExactCurl(curl, sockfd, ext, 2)) break;
 			payloadLen = (ext[0] << 8) | ext[1];
 		}
 		else if (payloadLen == 127)
 		{
 			uint8_t ext[8];
-			if (!recvExactSsl(ssl, ext, 8)) break;
+			if (!recvExactCurl(curl, sockfd, ext, 8)) break;
 			payloadLen = 0;
 			for (int i = 0; i < 8; i++) payloadLen = (payloadLen << 8) | ext[i];
 		}
 
 		uint8_t maskKey[4] = {0};
-		if (masked && !recvExactSsl(ssl, maskKey, 4)) break;
+		if (masked && !recvExactCurl(curl, sockfd, maskKey, 4)) break;
 
 		if (payloadLen > 1024 * 512) break;
 		std::vector<uint8_t> payload(payloadLen);
-		if (payloadLen > 0 && !recvExactSsl(ssl, payload.data(), payloadLen)) break;
+		if (payloadLen > 0 && !recvExactCurl(curl, sockfd, payload.data(), payloadLen)) break;
 
 		if (masked)
 		{
@@ -508,7 +506,7 @@ void LanManager::networkThreadLoop()
 		{
 			std::lock_guard<std::mutex> lock(_sendMutex);
 			uint8_t pong[6] = {0x8A, 0x80, 0x11, 0x22, 0x33, 0x44};
-			SSL_write(ssl, pong, 6);
+			sendExactCurl(curl, sockfd, pong, 6);
 		}
 		else if (opcode == 0x1)
 		{
@@ -527,7 +525,6 @@ void LanManager::networkThreadLoop()
 		_statusMsg = "Koneksi Terputus";
 	}
 }
-
 void LanManager::handleWsMessage(const string &rawMsg)
 {
 	string eventName = extractJsonField(rawMsg, "event");
