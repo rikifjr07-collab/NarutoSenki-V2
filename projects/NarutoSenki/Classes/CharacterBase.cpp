@@ -4469,6 +4469,14 @@ void CharacterBase::knockDown()
 
 void CharacterBase::dead()
 {
+    if (_hasGivenCoin)
+        return;
+    _hasGivenCoin = true;
+
+	if (_hasReportedDeath)
+		return;
+	_hasReportedDeath = true;
+
 	getGameModeHandler()->onCharacterDead(this);
 	CCNotificationCenter::sharedNotificationCenter()->removeObserver(this, "acceptAttack");
 
@@ -4681,6 +4689,7 @@ void CharacterBase::dealloc()
 void CharacterBase::reborn(float dt)
 {
     _hasReportedDeath = false;
+    _hasGivenCoin = false;
     getGameModeHandler()->onCharacterReborn(this);
 }
 
