@@ -1,16 +1,172 @@
 #include "LanManager.h"
 #include "Core/Provider.hpp"
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <sstream>
 #include <chrono>
+#include <cstring>
+#include <cstdlib>
+#include <ctime>
 
+using namespace cocos2d;
+using namespace cocos2d::extension;
+
+static const string APINATOR_KEY     = "app_7d6ca9a2be2744b70e2a95f3824f7d9d671562ed";
+static const string APINATOR_SECRET  = "f876dc1769e25a3d8dac1218d0b7659795ac5cc1128337b85309b82f4854c143";
+static const string APINATOR_CLUSTER = "us";
+
+namespace {
+    static const uint32_t k256[64] = {
+        0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+        0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+        0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+        0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+        0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+        0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+        0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+        0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+    };
+
+    inline uint32_t rotr(uint32_t x, uint32_t n) { return (x >> n) | (x << (32 - n)); }
+
+    void sha256Raw(const uint8_t* data, size_t len, uint8_t out[32]) {
+        uint32_t h[8] = {0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19};
+        uint64_t bitLen = len * 8;
+        size_t paddedLen = ((len + 8) / 64 + 1) * 64;
+        std::vector<uint8_t> buf(paddedLen, 0);
+        memcpy(buf.data(), data, len);
+        buf[len] = 0x80;
+        for (int i = 0; i < 8; i++) buf[paddedLen - 1 - i] = (bitLen >> (i * 8)) & 0xff;
+
+        for (size_t offset = 0; offset < paddedLen; offset += 64) {
+            uint32_t w[64];
+            for (int i = 0; i < 16; i++)
+                w[i] = (buf[offset + i*4] << 24) | (buf[offset + i*4 + 1] << 16) | (buf[offset + i*4 + 2] << 8) | buf[offset + i*4 + 3];
+            for (int i = 16; i < 64; i++) {
+                uint32_t s0 = rotr(w[i-15], 7) ^ rotr(w[i-15], 18) ^ (w[i-15] >> 3);
+                uint32_t s1 = rotr(w[i-2], 17) ^ rotr(w[i-2], 19) ^ (w[i-2] >> 10);
+                w[i] = w[i-16] + s0 + w[i-7] + s1;
+            }
+            uint32_t a=h[0], b=h[1], c=h[2], d=h[3], e=h[4], f=h[5], g=h[6], hh=h[7];
+            for (int i = 0; i < 64; i++) {
+                uint32_t S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+                uint32_t ch = (e & f) ^ ((~e) & g);
+                uint32_t temp1 = hh + S1 + ch + k256[i] + w[i];
+                uint32_t S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+                uint32_t maj = (a & b) ^ (a & c) ^ (b & c);
+                uint32_t temp2 = S0 + maj;
+                hh = g; g = f; f = e; e = d + temp1; d = c; c = b; b = a; a = temp1 + temp2;
+            }
+            h[0]+=a; h[1]+=b; h[2]+=c; h[3]+=d; h[4]+=e; h[5]+=f; h[6]+=g; h[7]+=hh;
+        }
+        for (int i = 0; i < 8; i++) {
+            out[i*4] = (h[i] >> 24) & 0xff; out[i*4+1] = (h[i] >> 16) & 0xff;
+            out[i*4+2] = (h[i] >> 8) & 0xff; out[i*4+3] = h[i] & 0xff;
+        }
+    }
+
+    string hmacSha256Hex(const string& key, const string& msg) {
+        uint8_t kPad[64] = {0};
+        if (key.size() > 64) sha256Raw((const uint8_t*)key.data(), key.size(), kPad);
+        else memcpy(kPad, key.data(), key.size());
+
+        std::vector<uint8_t> iKeyMsg(64 + msg.size());
+        uint8_t oKeyPad[64];
+        for (int i = 0; i < 64; i++) {
+            iKeyMsg[i] = kPad[i] ^ 0x36;
+            oKeyPad[i] = kPad[i] ^ 0x5c;
+        }
+        memcpy(iKeyMsg.data() + 64, msg.data(), msg.size());
+        uint8_t innerHash[32];
+        sha256Raw(iKeyMsg.data(), iKeyMsg.size(), innerHash);
+
+        uint8_t outerBuf[64 + 32];
+        memcpy(outerBuf, oKeyPad, 64);
+        memcpy(outerBuf + 64, innerHash, 32);
+        uint8_t finalHash[32];
+        sha256Raw(outerBuf, 96, finalHash);
+
+        char hexOut[65];
+        for (int i = 0; i < 32; i++) sprintf(hexOut + i * 2, "%02x", finalHash[i]);
+        hexOut[64] = '\0';
+        return string(hexOut);
+    }
+
+    string escapeJson(const string& s) {
+        string out;
+        out.reserve(s.size() + 8);
+        for (char c : s) {
+            if (c == '"') out += "\\\"";
+            else if (c == '\\') out += "\\\\";
+            else if (c == '\n') out += "\\n";
+            else if (c == '\r') out += "\\r";
+            else out += c;
+        }
+        return out;
+    }
+
+    string unescapeJson(const string& s) {
+        string out;
+        out.reserve(s.size());
+        for (size_t i = 0; i < s.size(); i++) {
+            if (s[i] == '\\' && i + 1 < s.size()) {
+                char nxt = s[i + 1];
+                if (nxt == '"') { out += '"'; i++; }
+                else if (nxt == '\\') { out += '\\'; i++; }
+                else if (nxt == 'n') { out += '\n'; i++; }
+                else if (nxt == 'r') { out += '\r'; i++; }
+                else out += s[i];
+            } else {
+                out += s[i];
+            }
+        }
+        return out;
+    }
+
+    string extractJsonField(const string& json, const string& key) {
+        string pattern = "\"" + key + "\":";
+        size_t pos = json.find(pattern);
+        if (pos == string::npos) return "";
+        pos += pattern.size();
+        while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t')) pos++;
+        if (pos >= json.size()) return "";
+
+        if (json[pos] == '"') {
+            pos++;
+            string val;
+            while (pos < json.size()) {
+                if (json[pos] == '\\' && pos + 1 < json.size()) {
+                    val += json[pos];
+                    val += json[pos + 1];
+                    pos += 2;
+                } else if (json[pos] == '"') {
+                    break;
+                } else {
+                    val += json[pos++];
+                }
+            }
+            return unescapeJson(val);
+        } else if (json[pos] == '{') {
+            int depth = 1;
+            size_t start = pos++;
+            while (pos < json.size() && depth > 0) {
+                if (json[pos] == '"') {
+                    pos++;
+                    while (pos < json.size()) {
+                        if (json[pos] == '\\') pos += 2;
+                        else if (json[pos] == '"') { pos++; break; }
+                        else pos++;
+                    }
+                } else {
+                    if (json[pos] == '{') depth++;
+                    else if (json[pos] == '}') depth--;
+                    pos++;
+                }
+            }
+            return json.substr(start, pos - start);
+        }
+        return "";
+    }
+}
 static LanManager *s_lanInstance = nullptr;
-constexpr int TCP_PORT = 8889;
-constexpr int UDP_PORT = 8890;
 
 LanManager *LanManager::getInstance()
 {
@@ -21,6 +177,7 @@ LanManager *LanManager::getInstance()
 
 LanManager::LanManager()
 {
+	srand((unsigned int)time(nullptr));
 	for (int i = 0; i < 6; i++)
 	{
 		_slots[i].ownerId = 0;
@@ -67,16 +224,20 @@ void LanManager::disconnect()
 	_gameStarted = false;
     _winnerGroup = -1;
     _pingMs = 0;
-	
-	if (_tcpSocket >= 0) { close(_tcpSocket); _tcpSocket = -1; }
-	if (_udpSocket >= 0) { close(_udpSocket); _udpSocket = -1; }
+    _wsConnected = false;
+    _channelSubscribed = false;
+    _socketId = "";
+    _roomCode = "";
+    _nextPlayerId = 2;
+
+	if (_ws)
+	{
+		WebSocket* oldWs = _ws;
+		_ws = nullptr;
+		oldWs->close();
+	}
 
 	std::lock_guard<std::mutex> lock(_dataMutex);
-	for (int fd : _clientSockets)
-		if (fd >= 0) close(fd);
-	_clientSockets.clear();
-	_clientIps.clear();
-    
 	for (int i = 0; i < 6; i++)
 	{
 		_slots[i].ownerId = 0;
@@ -95,257 +256,416 @@ bool LanManager::startHost()
 {
 	disconnect();
 
-	_tcpSocket = socket(AF_INET, SOCK_STREAM, 0);
-	if (_tcpSocket < 0) return false;
-
-	int opt = 1;
-	setsockopt(_tcpSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-
-	sockaddr_in addr{};
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = INADDR_ANY;
-	addr.sin_port = htons(TCP_PORT);
-
-	if (::bind(_tcpSocket, (sockaddr *)&addr, sizeof(addr)) < 0)
-
-	{
-		close(_tcpSocket);
-		_tcpSocket = -1;
-		_statusMsg = "Port Sibuk";
-		return false;
-	}
-
-	listen(_tcpSocket, 5);
-
-	_udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
-	setsockopt(_udpSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-	sockaddr_in udpAddr{};
-	udpAddr.sin_family = AF_INET;
-	udpAddr.sin_addr.s_addr = INADDR_ANY;
-	udpAddr.sin_port = htons(UDP_PORT);
-	::bind(_udpSocket, (sockaddr *)&udpAddr, sizeof(udpAddr));
-
-
+	int codeNum = 1000 + (rand() % 9000);
+	_roomCode = format("{}", codeNum);
 	_isHost = true;
 	_running = true;
 	_myPlayerId = 1;
+	_nextPlayerId = 2;
 
 	{
 		std::lock_guard<std::mutex> lock(_dataMutex);
 		_slots[0].ownerId = 1;
-		_statusMsg = "Host Aktif (1/6)";
+		_statusMsg = "Menghubungkan Server...";
 	}
 
-	std::thread(&LanManager::hostAcceptLoop, this).detach();
-	std::thread(&LanManager::udpReceiveLoop, this).detach();
+	string url = format("ws://ws-{}.apinator.io/app/{}", APINATOR_CLUSTER, APINATOR_KEY);
+	_ws = new WebSocket();
+	if (!_ws->init(*this, url))
+	{
+		delete _ws;
+		_ws = nullptr;
+		_isHost = false;
+		_running = false;
+		_statusMsg = "Gagal Init WebSocket";
+		return false;
+	}
 	return true;
 }
 
-bool LanManager::joinHost(const string &ipAddress)
+bool LanManager::joinHost(const string &roomCodeOrIp)
 {
 	disconnect();
 
-	_tcpSocket = socket(AF_INET, SOCK_STREAM, 0);
-	if (_tcpSocket < 0) return false;
+	string code = roomCodeOrIp;
+	while (!code.empty() && (code.back() == ' ' || code.back() == '\n' || code.back() == '\r'))
+		code.pop_back();
 
-	sockaddr_in serverAddr{};
-	serverAddr.sin_family = AF_INET;
-	serverAddr.sin_port = htons(TCP_PORT);
-	if (inet_pton(AF_INET, ipAddress.c_str(), &serverAddr.sin_addr) <= 0)
+	if (code.empty())
 	{
-		close(_tcpSocket);
-		_tcpSocket = -1;
-		_statusMsg = "IP Tidak Valid";
+		_statusMsg = "Kode Room Kosong";
 		return false;
 	}
 
-	if (connect(_tcpSocket, (sockaddr *)&serverAddr, sizeof(serverAddr)) < 0)
-	{
-		close(_tcpSocket);
-		_tcpSocket = -1;
-		_statusMsg = "Gagal Terhubung";
-		return false;
-	}
-
-	_udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
-	int opt = 1; setsockopt(_udpSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-	sockaddr_in udpAddr{};
-	udpAddr.sin_family = AF_INET;
-	udpAddr.sin_addr.s_addr = INADDR_ANY;
-	udpAddr.sin_port = htons(UDP_PORT + 1);
-	::bind(_udpSocket, (sockaddr *)&udpAddr, sizeof(udpAddr));
-
-	_hostIp = ipAddress;
+	_roomCode = code;
+	_clientTempId = format("C{}", 10000 + (rand() % 90000));
 	_isClient = true;
 	_running = true;
-	_statusMsg = "Terhubung ke " + ipAddress;
 
-	std::thread(&LanManager::clientReceiveLoop, this).detach();
-	std::thread(&LanManager::udpReceiveLoop, this).detach();
+	{
+		std::lock_guard<std::mutex> lock(_dataMutex);
+		_statusMsg = "Masuk Room " + _roomCode + "...";
+	}
+
+	string url = format("ws://ws-{}.apinator.io/app/{}", APINATOR_CLUSTER, APINATOR_KEY);
+	_ws = new WebSocket();
+	if (!_ws->init(*this, url))
+	{
+		delete _ws;
+		_ws = nullptr;
+		_isClient = false;
+		_running = false;
+		_statusMsg = "Gagal Init WebSocket";
+		return false;
+	}
 	return true;
 }
-void LanManager::hostAcceptLoop()
+
+void LanManager::onOpen(WebSocket* ws)
 {
-	int nextPlayerId = 2;
-	while (_running && _isHost)
+	if (ws != _ws) return;
+	_wsConnected = true;
+	std::lock_guard<std::mutex> lock(_dataMutex);
+	_statusMsg = "Otentikasi Room...";
+}
+
+void LanManager::onClose(WebSocket* ws)
+{
+	if (ws == _ws)
 	{
-		sockaddr_in clientAddr{};
-		socklen_t len = sizeof(clientAddr);
-		int clientFd = accept(_tcpSocket, (sockaddr *)&clientAddr, &len);
-		if (clientFd < 0) continue;
+		_wsConnected = false;
+		_channelSubscribed = false;
+		_isHost = false;
+		_isClient = false;
+		std::lock_guard<std::mutex> lock(_dataMutex);
+		_statusMsg = "Koneksi Terputus";
+	}
+	delete ws;
+}
 
-		char ipStr[INET_ADDRSTRLEN];
-		inet_ntop(AF_INET, &clientAddr.sin_addr, ipStr, INET_ADDRSTRLEN);
+void LanManager::onError(WebSocket* ws, const WebSocket::ErrorCode& error)
+{
+	if (ws == _ws)
+	{
+		std::lock_guard<std::mutex> lock(_dataMutex);
+		_statusMsg = "Gagal Terhubung Server";
+	}
+}
+void LanManager::onMessage(WebSocket* ws, const WebSocket::Data& data)
+{
+	if (ws != _ws || !data.bytes || data.len <= 0) return;
+	string rawMsg(data.bytes, data.len);
 
-		int assignedId = -1;
+	string eventName = extractJsonField(rawMsg, "event");
+	string eventData = extractJsonField(rawMsg, "data");
+
+	if (eventName == "connection_established")
+	{
+		_socketId = extractJsonField(eventData, "socket_id");
+		if (!_socketId.empty())
+		{
+			string channelName = "private-room-" + _roomCode;
+			string signPayload = _socketId + ":" + channelName;
+			string signature = hmacSha256Hex(APINATOR_SECRET, signPayload);
+			string authString = APINATOR_KEY + ":" + signature;
+
+			string subJson = format("{\"event\":\"subscribe\",\"data\":{\"channel\":\"{}\",\"auth\":\"{}\"}}",
+									channelName, authString);
+			_ws->send(subJson);
+		}
+	}
+	else if (eventName == "subscription_succeeded")
+	{
+		_channelSubscribed = true;
+		if (_isHost)
 		{
 			std::lock_guard<std::mutex> lock(_dataMutex);
-			if (nextPlayerId <= 6)
-			{
-				for (int i = 0; i < 6; i++)
-				{
-					if (_slots[i].ownerId == 0)
-					{
-						assignedId = nextPlayerId++;
-						_slots[i].ownerId = assignedId;
-						_clientSockets.push_back(clientFd);
-						_clientIps.push_back(string(ipStr));
-						_statusMsg = format("Host ({}/6)", (int)_clientSockets.size() + 1);
-						break;
-					}
-				}
-			}
+			_statusMsg = format("Room: {} (1/6)", _roomCode);
 		}
-
-		if (assignedId == -1)
+		else if (_isClient)
 		{
-			close(clientFd);
-			continue;
-		}
-
-		string idMsg = format("ASSIGN_ID:{}\n", assignedId);
-		send(clientFd, idMsg.c_str(), idMsg.size(), 0);
-		broadcastLobbyState();
-
-		std::thread([this, clientFd, assignedId]() {
-			char buf[1024];
-			while (_running && _isHost)
 			{
-				int n = recv(clientFd, buf, sizeof(buf) - 1, 0);
-				if (n <= 0) break;
-				buf[n] = '\0';
-				string msg(buf);
+				std::lock_guard<std::mutex> lock(_dataMutex);
+				_statusMsg = "Minta Slot Room " + _roomCode + "...";
+			}
+			sendGamePacket("HELLO:" + _clientTempId);
+		}
+	}
+	else if (eventName == "client-pkt")
+	{
+		string pkt = extractJsonField(eventData, "p");
+		if (!pkt.empty())
+		{
+			processGamePacket(pkt);
+		}
+	}
+}
 
-				if (msg.find("MOVE:") == 0)
+void LanManager::sendApinatorEvent(const string &eventName, const string &payloadData)
+{
+	if (!_ws || !_wsConnected || !_channelSubscribed) return;
+	string channelName = "private-room-" + _roomCode;
+	string json = format("{\"event\":\"{}\",\"channel\":\"{}\",\"data\":{{\"p\":\"{}\"}}}",
+						 eventName, channelName, escapeJson(payloadData));
+	_ws->send(json);
+}
+
+void LanManager::sendGamePacket(const string &rawPacket)
+{
+	string tagged = (_isHost ? "H|" : "C|") + rawPacket;
+	sendApinatorEvent("client-pkt", tagged);
+}
+
+void LanManager::processGamePacket(const string &taggedPkt)
+{
+	if (taggedPkt.size() < 3) return;
+	char senderRole = taggedPkt[0];
+	string pkt = taggedPkt.substr(2);
+
+	if (_isHost && senderRole == 'H') return;
+	if (_isClient && senderRole == 'C') return;
+
+	if (_isHost)
+	{
+		if (pkt.find("HELLO:") == 0)
+		{
+			string tempId = pkt.substr(6);
+			int assignedId = -1;
+			int activeCount = 1;
+			{
+				std::lock_guard<std::mutex> lock(_dataMutex);
+				if (_nextPlayerId <= 6)
 				{
-					int targetSlot = atoi(msg.substr(5).c_str());
-					std::lock_guard<std::mutex> lock(_dataMutex);
-					if (targetSlot >= 0 && targetSlot < 6 && _slots[targetSlot].ownerId == 0)
-					{
-						for (int i = 0; i < 6; i++)
-						{
-							if (_slots[i].ownerId == assignedId)
-							{
-								_slots[targetSlot].ownerId = assignedId;
-								_slots[targetSlot].heroName = _slots[i].heroName;
-								_slots[i].ownerId = 0;
-								_slots[i].heroName = "";
-								break;
-							}
-						}
-					}
-					broadcastLobbyState();
-				}
-				else if (msg.find("HERO:") == 0)
-				{
-					string hName = msg.substr(5);
-					while (!hName.empty() && (hName.back() == '\n' || hName.back() == '\r'))
-						hName.pop_back();
-					std::lock_guard<std::mutex> lock(_dataMutex);
 					for (int i = 0; i < 6; i++)
 					{
-						if (_slots[i].ownerId == assignedId)
+						if (_slots[i].ownerId == 0)
 						{
-							_slots[i].heroName = hName;
+							assignedId = _nextPlayerId++;
+							_slots[i].ownerId = assignedId;
 							break;
 						}
 					}
-					broadcastLobbyState();
 				}
-				else if (msg.find("SURRENDER:") == 0)
-{
-	int loserGroup = atoi(msg.substr(10).c_str());
-	int winnerGroup = (loserGroup == 0) ? 1 : 0;
-	broadcastGameOver(winnerGroup);
-}
-
+				for (int i = 0; i < 6; i++)
+					if (_slots[i].ownerId > 1) activeCount++;
+				_statusMsg = format("Room: {} ({}/6)", _roomCode, activeCount);
 			}
-		}).detach();
-	}
-}
 
-void LanManager::clientReceiveLoop()
-{
-	char buf[1024];
-	while (_running && _isClient)
-	{
-		int n = recv(_tcpSocket, buf, sizeof(buf) - 1, 0);
-		if (n <= 0)
-		{
-			_statusMsg = "Koneksi Terputus";
-			_isClient = false;
-			break;
+			if (assignedId != -1)
+			{
+				sendGamePacket(format("ASSIGN:{},{}", tempId, assignedId));
+				broadcastLobbyState();
+			}
 		}
-		buf[n] = '\0';
-		std::stringstream ss(buf);
-		string line;
-		while (std::getline(ss, line))
+		else if (pkt.find("MOVE:") == 0)
 		{
-			if (line.find("ASSIGN_ID:") == 0)
+			int playerId = 0, targetSlot = -1;
+			if (sscanf(pkt.c_str() + 5, "%d,%d", &playerId, &targetSlot) == 2)
 			{
-				_myPlayerId = atoi(line.substr(10).c_str());
-				_statusMsg = format("Terhubung (Slot {}P)", _myPlayerId);
+				std::lock_guard<std::mutex> lock(_dataMutex);
+				if (targetSlot >= 0 && targetSlot < 6 && _slots[targetSlot].ownerId == 0)
+				{
+					for (int i = 0; i < 6; i++)
+					{
+						if (_slots[i].ownerId == playerId)
+						{
+							_slots[targetSlot].ownerId = playerId;
+							_slots[targetSlot].heroName = _slots[i].heroName;
+							_slots[i].ownerId = 0;
+							_slots[i].heroName = "";
+							break;
+						}
+					}
+				}
+				broadcastLobbyState();
 			}
-			else if (line.find("LOBBY:") == 0)
+		}
+		else if (pkt.find("HERO:") == 0)
+		{
+			size_t comma = pkt.find(',', 5);
+			if (comma != string::npos)
 			{
-				parseLobbyPacket(line.substr(6));
+				int playerId = atoi(pkt.substr(5, comma - 5).c_str());
+				string hName = pkt.substr(comma + 1);
+				std::lock_guard<std::mutex> lock(_dataMutex);
+				for (int i = 0; i < 6; i++)
+				{
+					if (_slots[i].ownerId == playerId)
+					{
+						_slots[i].heroName = hName;
+						break;
+					}
+				}
+				broadcastLobbyState();
 			}
-			else if (line.find("START") == 0)
+		}
+		else if (pkt.find("SURRENDER:") == 0)
+		{
+			int loserGroup = atoi(pkt.substr(10).c_str());
+			int winnerGroup = (loserGroup == 0) ? 1 : 0;
+			broadcastGameOver(winnerGroup);
+		}
+		else if (pkt.find("IN:") == 0)
+		{
+			NetPlayerInput inp{};
+			int flip = 0;
+			int parsed = sscanf(pkt.c_str() + 3, "%d,%f,%f,%d,%f,%f,%d",
+								&inp.playerId, &inp.dirX, &inp.dirY, &inp.actionType, &inp.posX, &inp.posY, &flip);
+			if (parsed >= 4)
 			{
-				_gameStarted = true;
+				inp.isFlipped = (flip == 1);
+				std::lock_guard<std::mutex> lock(_dataMutex);
+				_pendingInputs.push_back(inp);
 			}
-			else if (line.find("OVER:") == 0)
-{
-	_winnerGroup = atoi(line.substr(5).c_str());
-}
-            else if (line.find("KILL:") == 0)
-{
-    char kBuf[64] = {0};
-    char dBuf[64] = {0};
-    int streak = 1, kKills = 0, aKills = 0;
-    if (sscanf(line.c_str() + 5, "%63[^,],%63[^,],%d,%d,%d", kBuf, dBuf, &streak, &kKills, &aKills) == 5)
-    {
-        std::lock_guard<std::mutex> lock(_dataMutex);
-        _lastKillerName = kBuf;
-        _lastDeadName = dBuf;
-        _lastKillStreak = streak;
-        _konohaKills = kKills;
-        _akatsukiKills = aKills;
-        _hasNewKillReport = true;
+		}
+		else if (pkt.find("PING:") == 0)
+		{
+			sendGamePacket("PONG:" + pkt.substr(5));
+		}
 	}
-}
-else if (line.find("GARD:") == 0)
-{
-    char gBuf[64] = {0};
-    int grp = 0;
-    if (sscanf(line.c_str() + 5, "%63[^,],%d", gBuf, &grp) == 2)
-    {
-        std::lock_guard<std::mutex> lock(_dataMutex);
-        _spawnedGuardName = gBuf;
-        _spawnedGuardGroup = grp;
-        _hasNewGuardian = true;
-    }
-}
+	else if (_isClient)
+	{
+		if (pkt.find("ASSIGN:") == 0)
+		{
+			size_t comma = pkt.find(',', 7);
+			if (comma != string::npos)
+			{
+				string targetTempId = pkt.substr(7, comma - 7);
+				int assignedId = atoi(pkt.substr(comma + 1).c_str());
+				if (targetTempId == _clientTempId)
+				{
+					_myPlayerId = assignedId;
+					std::lock_guard<std::mutex> lock(_dataMutex);
+					_statusMsg = format("Room {} (Slot {}P)", _roomCode, _myPlayerId);
+				}
+			}
+		}
+		else if (pkt.find("LOBBY:") == 0)
+		{
+			parseLobbyPacket(pkt.substr(6));
+		}
+		else if (pkt.find("START") == 0)
+		{
+			_gameStarted = true;
+		}
+		else if (pkt.find("OVER:") == 0)
+		{
+			_winnerGroup = atoi(pkt.substr(5).c_str());
+		}
+		else if (pkt.find("KILL:") == 0)
+		{
+			char kBuf[64] = {0};
+			char dBuf[64] = {0};
+			int streak = 1, kKills = 0, aKills = 0;
+			if (sscanf(pkt.c_str() + 5, "%63[^,],%63[^,],%d,%d,%d", kBuf, dBuf, &streak, &kKills, &aKills) == 5)
+			{
+				std::lock_guard<std::mutex> lock(_dataMutex);
+				_lastKillerName = kBuf;
+				_lastDeadName = dBuf;
+				_lastKillStreak = streak;
+				_konohaKills = kKills;
+				_akatsukiKills = aKills;
+				_hasNewKillReport = true;
+			}
+		}
+		else if (pkt.find("GARD:") == 0)
+		{
+			char gBuf[64] = {0};
+			int grp = 0;
+			if (sscanf(pkt.c_str() + 5, "%63[^,],%d", gBuf, &grp) == 2)
+			{
+				std::lock_guard<std::mutex> lock(_dataMutex);
+				_spawnedGuardName = gBuf;
+				_spawnedGuardGroup = grp;
+				_hasNewGuardian = true;
+			}
+		}
+		else if (pkt.find("PONG:") == 0)
+		{
+			long long sentTime = std::stoll(pkt.substr(5));
+			auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now().time_since_epoch()).count();
+			int rtt = static_cast<int>(now - sentTime);
+			_pingMs = (rtt < 0) ? 0 : rtt;
+		}
+		else if (pkt.find("WS:") == 0)
+		{
+			vector<NetHeroSync> list;
+			std::stringstream ss(pkt.substr(3));
+			string seg;
+			while (std::getline(ss, seg, ';'))
+			{
+				NetHeroSync h{};
+				int flip = 0, stick = 0;
+				if (sscanf(seg.c_str(), "%d,%f,%f,%d,%d,%u,%u,%d,%d,%d",
+						   &h.charId, &h.x, &h.y, &flip, &h.state, &h.hp, &h.maxHp, &h.lastAttack, &h.attackSeq, &stick) == 10)
+				{
+					h.isFlipped = (flip == 1);
+					h.isSticking = (stick == 1);
+					list.push_back(h);
+				}
+			}
+			std::lock_guard<std::mutex> lock(_dataMutex);
+			_latestWorldState = list;
+		}
+		else if (pkt.find("FL:") == 0)
+		{
+			vector<NetFlogSync> list;
+			std::stringstream ss(pkt.substr(3));
+			string seg;
+			while (std::getline(ss, seg, ';'))
+			{
+				NetFlogSync f{};
+				int flip = 0;
+				if (sscanf(seg.c_str(), "%d,%d,%f,%f,%d,%d,%u", &f.group, &f.index, &f.x, &f.y, &flip, &f.state, &f.hp) == 7)
+				{
+					f.isFlipped = (flip == 1);
+					list.push_back(f);
+				}
+			}
+			std::lock_guard<std::mutex> lock(_dataMutex);
+			_latestFlogState = list;
+		}
+		else if (pkt.find("TW:") == 0)
+		{
+			vector<NetTowerSync> list;
+			std::stringstream ss(pkt.substr(3));
+			string seg;
+			while (std::getline(ss, seg, ';'))
+			{
+				NetTowerSync t{};
+				if (sscanf(seg.c_str(), "%d,%u,%u", &t.charId, &t.hp, &t.maxHp) == 3)
+				{
+					list.push_back(t);
+				}
+			}
+			std::lock_guard<std::mutex> lock(_dataMutex);
+			_latestTowerState = list;
+		}
+		else if (pkt.find("MN:") == 0)
+		{
+			vector<NetMonsterSync> list;
+			string body = pkt.substr(3);
+			if (!body.empty())
+			{
+				std::stringstream ss(body);
+				string seg;
+				while (std::getline(ss, seg, ';'))
+				{
+					NetMonsterSync m{};
+					char nameBuf[64] = {0};
+					int flip = 0;
+					if (sscanf(seg.c_str(), "%d,%d,%63[^,],%f,%f,%d,%d,%u,%u",
+							   &m.masterCharId, &m.monIndex, nameBuf, &m.x, &m.y, &flip, &m.state, &m.hp, &m.maxHp) == 9)
+					{
+						m.name = nameBuf;
+						m.isFlipped = (flip == 1);
+						list.push_back(m);
+					}
+				}
+			}
+			std::lock_guard<std::mutex> lock(_dataMutex);
+			_latestMonsterState = list;
 		}
 	}
 }
@@ -354,18 +674,15 @@ void LanManager::broadcastLobbyState()
 {
 	if (!_isHost) return;
 	string pkt = "LOBBY:";
-	for (int i = 0; i < 6; i++)
 	{
-		pkt += format("{},{}", _slots[i].ownerId, _slots[i].heroName);
-		if (i < 5) pkt += "|";
+		std::lock_guard<std::mutex> lock(_dataMutex);
+		for (int i = 0; i < 6; i++)
+		{
+			pkt += format("{},{}", _slots[i].ownerId, _slots[i].heroName);
+			if (i < 5) pkt += "|";
+		}
 	}
-	pkt += "\n";
-
-	for (int fd : _clientSockets)
-	{
-		if (fd >= 0)
-			send(fd, pkt.c_str(), pkt.size(), 0);
-	}
+	sendGamePacket(pkt);
 }
 
 void LanManager::parseLobbyPacket(const string &packet)
@@ -391,27 +708,28 @@ void LanManager::requestMoveSlot(int targetSlot)
 	if (targetSlot < 0 || targetSlot >= 6) return;
 	if (_isHost)
 	{
-		std::lock_guard<std::mutex> lock(_dataMutex);
-		if (_slots[targetSlot].ownerId == 0)
 		{
-			for (int i = 0; i < 6; i++)
+			std::lock_guard<std::mutex> lock(_dataMutex);
+			if (_slots[targetSlot].ownerId == 0)
 			{
-				if (_slots[i].ownerId == _myPlayerId)
+				for (int i = 0; i < 6; i++)
 				{
-					_slots[targetSlot].ownerId = _myPlayerId;
-					_slots[targetSlot].heroName = _slots[i].heroName;
-					_slots[i].ownerId = 0;
-					_slots[i].heroName = "";
-					break;
+					if (_slots[i].ownerId == _myPlayerId)
+					{
+						_slots[targetSlot].ownerId = _myPlayerId;
+						_slots[targetSlot].heroName = _slots[i].heroName;
+						_slots[i].ownerId = 0;
+						_slots[i].heroName = "";
+						break;
+					}
 				}
 			}
 		}
 		broadcastLobbyState();
 	}
-	else if (_isClient && _tcpSocket >= 0)
+	else if (_isClient)
 	{
-		string msg = format("MOVE:{}\n", targetSlot);
-		send(_tcpSocket, msg.c_str(), msg.size(), 0);
+		sendGamePacket(format("MOVE:{},{}", _myPlayerId, targetSlot));
 	}
 }
 
@@ -419,21 +737,22 @@ void LanManager::requestSelectHero(const string &heroName)
 {
 	if (_isHost)
 	{
-		std::lock_guard<std::mutex> lock(_dataMutex);
-		for (int i = 0; i < 6; i++)
 		{
-			if (_slots[i].ownerId == _myPlayerId)
+			std::lock_guard<std::mutex> lock(_dataMutex);
+			for (int i = 0; i < 6; i++)
 			{
-				_slots[i].heroName = heroName;
-				break;
+				if (_slots[i].ownerId == _myPlayerId)
+				{
+					_slots[i].heroName = heroName;
+					break;
+				}
 			}
 		}
 		broadcastLobbyState();
 	}
-	else if (_isClient && _tcpSocket >= 0)
+	else if (_isClient)
 	{
-		string msg = format("HERO:{}\n", heroName);
-		send(_tcpSocket, msg.c_str(), msg.size(), 0);
+		sendGamePacket(format("HERO:{},{}", _myPlayerId, heroName));
 	}
 }
 
@@ -464,31 +783,21 @@ void LanManager::hostStartGame()
 	}
 
 	broadcastLobbyState();
-	string startMsg = "START\n";
-	for (int fd : _clientSockets)
-	{
-		if (fd >= 0)
-			send(fd, startMsg.c_str(), startMsg.size(), 0);
-	}
+	sendGamePacket("START");
 	_gameStarted = true;
 }
 
 void LanManager::sendClientInput(float dirX, float dirY, int actionType, float posX, float posY, bool isFlipped)
 {
-    if (!_isClient || _udpSocket < 0) return;
-    sockaddr_in dest{};
-    dest.sin_family = AF_INET;
-    dest.sin_port = htons(UDP_PORT);
-    inet_pton(AF_INET, _hostIp.c_str(), &dest.sin_addr);
-
-    string pkt = format("IN:{},{:.2f},{:.2f},{},{:.1f},{:.1f},{}", 
+    if (!_isClient || !_channelSubscribed) return;
+    string pkt = format("IN:{},{:.2f},{:.2f},{},{:.1f},{:.1f},{}",
                         _myPlayerId, dirX, dirY, actionType, posX, posY, isFlipped ? 1 : 0);
-    sendto(_udpSocket, pkt.c_str(), pkt.size(), 0, (sockaddr *)&dest, sizeof(dest));
+    sendGamePacket(pkt);
 }
 
 void LanManager::broadcastWorldState(const vector<NetHeroSync> &heroes)
 {
-	if (!_isHost || _udpSocket < 0) return;
+	if (!_isHost || !_channelSubscribed) return;
 	string pkt = "WS:";
 	for (size_t i = 0; i < heroes.size(); i++)
 	{
@@ -497,140 +806,7 @@ void LanManager::broadcastWorldState(const vector<NetHeroSync> &heroes)
               h.charId, h.x, h.y, h.isFlipped ? 1 : 0, h.state, h.hp, h.maxHp, h.lastAttack, h.attackSeq, h.isSticking ? 1 : 0);
 		if (i + 1 < heroes.size()) pkt += ";";
 	}
-
-	std::lock_guard<std::mutex> lock(_dataMutex);
-	for (const auto &ip : _clientIps)
-	{
-		sockaddr_in dest{};
-		dest.sin_family = AF_INET;
-		dest.sin_port = htons(UDP_PORT + 1);
-		inet_pton(AF_INET, ip.c_str(), &dest.sin_addr);
-		sendto(_udpSocket, pkt.c_str(), pkt.size(), 0, (sockaddr *)&dest, sizeof(dest));
-	}
-}
-
-
-void LanManager::udpReceiveLoop()
-{
-	char buf[2048];
-	while (_running && _udpSocket >= 0)
-	{
-		sockaddr_in sender{};
-		socklen_t slen = sizeof(sender);
-		int n = recvfrom(_udpSocket, buf, sizeof(buf) - 1, 0, (sockaddr *)&sender, &slen);
-		if (n <= 0) continue;
-		buf[n] = '\0';
-		string pkt(buf);
-
-		if (_isHost && pkt.find("IN:") == 0)
-{
-    NetPlayerInput inp{};
-    int flip = 0;
-    int parsed = sscanf(pkt.c_str() + 3, "%d,%f,%f,%d,%f,%f,%d", 
-                        &inp.playerId, &inp.dirX, &inp.dirY, &inp.actionType, &inp.posX, &inp.posY, &flip);
-    if (parsed >= 4)
-    {
-        inp.isFlipped = (flip == 1);
-        std::lock_guard<std::mutex> lock(_dataMutex);
-        _pendingInputs.push_back(inp);
-    }
-}
-
-		else if (_isHost && pkt.find("PING:") == 0)
-{
-    string reply = "PONG:" + pkt.substr(5);
-    sendto(_udpSocket, reply.c_str(), reply.size(), 0, (sockaddr *)&sender, slen);
-}
-else if (_isClient && pkt.find("PONG:") == 0)
-{
-    long long sentTime = std::stoll(pkt.substr(5));
-    auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now().time_since_epoch()).count();
-    int rtt = static_cast<int>(now - sentTime);
-    _pingMs = (rtt < 0) ? 0 : rtt;
-}
-		else if (_isClient && pkt.find("WS:") == 0)
-{
-	vector<NetHeroSync> list;
-	std::stringstream ss(pkt.substr(3));
-	string seg;
-	while (std::getline(ss, seg, ';'))
-	{
-		NetHeroSync h{};
-int flip = 0, stick = 0;
-if (sscanf(seg.c_str(), "%d,%f,%f,%d,%d,%u,%u,%d,%d,%d",
-           &h.charId, &h.x, &h.y, &flip, &h.state, &h.hp, &h.maxHp, &h.lastAttack, &h.attackSeq, &stick) == 10)
-{
-    h.isFlipped = (flip == 1);
-    h.isSticking = (stick == 1);
-    list.push_back(h);
-}
-
-	}
-	std::lock_guard<std::mutex> lock(_dataMutex);
-	_latestWorldState = list;
-}
-    else if (_isClient && pkt.find("FL:") == 0)
-{
-	vector<NetFlogSync> list;
-	std::stringstream ss(pkt.substr(3));
-	string seg;
-	while (std::getline(ss, seg, ';'))
-	{
-		NetFlogSync f{};
-		int flip = 0;
-		if (sscanf(seg.c_str(), "%d,%d,%f,%f,%d,%d,%u", &f.group, &f.index, &f.x, &f.y, &flip, &f.state, &f.hp) == 7)
-		{
-			f.isFlipped = (flip == 1);
-			list.push_back(f);
-		}
-	}
-	std::lock_guard<std::mutex> lock(_dataMutex);
-	_latestFlogState = list;
-}
-else if (_isClient && pkt.find("TW:") == 0)
-{
-	vector<NetTowerSync> list;
-	std::stringstream ss(pkt.substr(3));
-	string seg;
-	while (std::getline(ss, seg, ';'))
-	{
-		NetTowerSync t{};
-		if (sscanf(seg.c_str(), "%d,%u,%u", &t.charId, &t.hp, &t.maxHp) == 3)
-		{
-			list.push_back(t);
-		}
-	}
-	std::lock_guard<std::mutex> lock(_dataMutex);
-	_latestTowerState = list;
-}
-    else if (_isClient && pkt.find("MN:") == 0)
-{
-    vector<NetMonsterSync> list;
-    string body = pkt.substr(3);
-    if (!body.empty())
-    {
-        std::stringstream ss(body);
-        string seg;
-        while (std::getline(ss, seg, ';'))
-        {
-            NetMonsterSync m{};
-            char nameBuf[64] = {0};
-            int flip = 0;
-            if (sscanf(seg.c_str(), "%d,%d,%63[^,],%f,%f,%d,%d,%u,%u",
-                       &m.masterCharId, &m.monIndex, nameBuf, &m.x, &m.y, &flip, &m.state, &m.hp, &m.maxHp) == 9)
-            {
-                m.name = nameBuf;
-                m.isFlipped = (flip == 1);
-                list.push_back(m);
-            }
-        }
-    }
-    std::lock_guard<std::mutex> lock(_dataMutex);
-    _latestMonsterState = list;
-}
-
-	}
+	sendGamePacket(pkt);
 }
 
 vector<NetPlayerInput> LanManager::popPendingInputs()
@@ -646,6 +822,7 @@ vector<NetHeroSync> LanManager::getLatestWorldState()
 	std::lock_guard<std::mutex> lock(_dataMutex);
 	return _latestWorldState;
 }
+
 void LanManager::notifySurrender(int myGroup)
 {
 	int enemyGroup = (myGroup == 0) ? 1 : 0;
@@ -653,10 +830,9 @@ void LanManager::notifySurrender(int myGroup)
 	{
 		broadcastGameOver(enemyGroup);
 	}
-	else if (_isClient && _tcpSocket >= 0)
+	else if (_isClient)
 	{
-		string msg = format("SURRENDER:{}\n", myGroup);
-		send(_tcpSocket, msg.c_str(), msg.size(), 0);
+		sendGamePacket(format("SURRENDER:{}", myGroup));
 	}
 }
 
@@ -664,33 +840,20 @@ void LanManager::broadcastGameOver(int winnerGroup)
 {
 	_winnerGroup = winnerGroup;
 	if (!_isHost) return;
-
-	string msg = format("OVER:{}\n", winnerGroup);
-	std::lock_guard<std::mutex> lock(_dataMutex);
-	for (int fd : _clientSockets)
-	{
-		if (fd >= 0)
-			send(fd, msg.c_str(), msg.size(), 0);
-	}
+	sendGamePacket(format("OVER:{}", winnerGroup));
 }
+
 void LanManager::sendPing()
 {
-    if (!_isClient || _udpSocket < 0) return;
-
+    if (!_isClient || !_channelSubscribed) return;
     auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now().time_since_epoch()).count();
-
-    sockaddr_in dest{};
-    dest.sin_family = AF_INET;
-    dest.sin_port = htons(UDP_PORT);
-    inet_pton(AF_INET, _hostIp.c_str(), &dest.sin_addr);
-
-    string pkt = format("PING:{}", now);
-    sendto(_udpSocket, pkt.c_str(), pkt.size(), 0, (sockaddr *)&dest, sizeof(dest));
+    sendGamePacket(format("PING:{}", now));
 }
+
 void LanManager::broadcastFlogState(const vector<NetFlogSync> &flogs)
 {
-	if (!_isHost || _udpSocket < 0 || flogs.empty()) return;
+	if (!_isHost || !_channelSubscribed || flogs.empty()) return;
 	string pkt = "FL:";
 	for (size_t i = 0; i < flogs.size(); i++)
 	{
@@ -698,16 +861,7 @@ void LanManager::broadcastFlogState(const vector<NetFlogSync> &flogs)
 		pkt += format("{},{},{:.0f},{:.0f},{},{},{}", f.group, f.index, f.x, f.y, f.isFlipped ? 1 : 0, f.state, f.hp);
 		if (i + 1 < flogs.size()) pkt += ";";
 	}
-
-	std::lock_guard<std::mutex> lock(_dataMutex);
-	for (const auto &ip : _clientIps)
-	{
-		sockaddr_in dest{};
-		dest.sin_family = AF_INET;
-		dest.sin_port = htons(UDP_PORT + 1);
-		inet_pton(AF_INET, ip.c_str(), &dest.sin_addr);
-		sendto(_udpSocket, pkt.c_str(), pkt.size(), 0, (sockaddr *)&dest, sizeof(dest));
-	}
+	sendGamePacket(pkt);
 }
 
 vector<NetFlogSync> LanManager::getLatestFlogState()
@@ -715,9 +869,10 @@ vector<NetFlogSync> LanManager::getLatestFlogState()
 	std::lock_guard<std::mutex> lock(_dataMutex);
 	return _latestFlogState;
 }
+
 void LanManager::broadcastTowerState(const vector<NetTowerSync> &towers)
 {
-	if (!_isHost || _udpSocket < 0 || towers.empty()) return;
+	if (!_isHost || !_channelSubscribed || towers.empty()) return;
 	string pkt = "TW:";
 	for (size_t i = 0; i < towers.size(); i++)
 	{
@@ -725,16 +880,7 @@ void LanManager::broadcastTowerState(const vector<NetTowerSync> &towers)
 		pkt += format("{},{},{}", t.charId, t.hp, t.maxHp);
 		if (i + 1 < towers.size()) pkt += ";";
 	}
-
-	std::lock_guard<std::mutex> lock(_dataMutex);
-	for (const auto &ip : _clientIps)
-	{
-		sockaddr_in dest{};
-		dest.sin_family = AF_INET;
-		dest.sin_port = htons(UDP_PORT + 1);
-		inet_pton(AF_INET, ip.c_str(), &dest.sin_addr);
-		sendto(_udpSocket, pkt.c_str(), pkt.size(), 0, (sockaddr *)&dest, sizeof(dest));
-	}
+	sendGamePacket(pkt);
 }
 
 vector<NetTowerSync> LanManager::getLatestTowerState()
@@ -742,9 +888,10 @@ vector<NetTowerSync> LanManager::getLatestTowerState()
 	std::lock_guard<std::mutex> lock(_dataMutex);
 	return _latestTowerState;
 }
+
 void LanManager::broadcastMonsterState(const vector<NetMonsterSync> &mons)
 {
-    if (!_isHost || _udpSocket < 0) return;
+    if (!_isHost || !_channelSubscribed) return;
     string pkt = "MN:";
     for (size_t i = 0; i < mons.size(); i++)
     {
@@ -753,16 +900,7 @@ void LanManager::broadcastMonsterState(const vector<NetMonsterSync> &mons)
                       m.masterCharId, m.monIndex, m.name, m.x, m.y, m.isFlipped ? 1 : 0, m.state, m.hp, m.maxHp);
         if (i + 1 < mons.size()) pkt += ";";
     }
-
-    std::lock_guard<std::mutex> lock(_dataMutex);
-    for (const auto &ip : _clientIps)
-    {
-        sockaddr_in dest{};
-        dest.sin_family = AF_INET;
-        dest.sin_port = htons(UDP_PORT + 1);
-        inet_pton(AF_INET, ip.c_str(), &dest.sin_addr);
-        sendto(_udpSocket, pkt.c_str(), pkt.size(), 0, (sockaddr *)&dest, sizeof(dest));
-    }
+    sendGamePacket(pkt);
 }
 
 vector<NetMonsterSync> LanManager::getLatestMonsterState()
@@ -770,6 +908,7 @@ vector<NetMonsterSync> LanManager::getLatestMonsterState()
     std::lock_guard<std::mutex> lock(_dataMutex);
     return _latestMonsterState;
 }
+
 void LanManager::broadcastKillEvent(const string &killerName, const string &deadName, int killNum, int konohaKills, int akatsukiKills)
 {
     {
@@ -778,14 +917,7 @@ void LanManager::broadcastKillEvent(const string &killerName, const string &dead
         _akatsukiKills = akatsukiKills;
     }
     if (!_isHost) return;
-
-    string msg = format("KILL:{},{},{},{},{}\n", killerName, deadName, killNum, konohaKills, akatsukiKills);
-    std::lock_guard<std::mutex> lock(_dataMutex);
-    for (int fd : _clientSockets)
-    {
-        if (fd >= 0)
-            send(fd, msg.c_str(), msg.size(), 0);
-    }
+    sendGamePacket(format("KILL:{},{},{},{},{}", killerName, deadName, killNum, konohaKills, akatsukiKills));
 }
 
 bool LanManager::popKillEvent(string &killerName, string &deadName, int &killNum)
@@ -805,16 +937,11 @@ void LanManager::getTeamKills(int &konohaKills, int &akatsukiKills)
     konohaKills = _konohaKills;
     akatsukiKills = _akatsukiKills;
 }
+
 void LanManager::broadcastGuardianSpawn(const string &guardName, int group)
 {
     if (!_isHost) return;
-    string msg = format("GARD:{},{}\n", guardName, group);
-    std::lock_guard<std::mutex> lock(_dataMutex);
-    for (int fd : _clientSockets)
-    {
-        if (fd >= 0)
-            send(fd, msg.c_str(), msg.size(), 0);
-    }
+    sendGamePacket(format("GARD:{},{}", guardName, group));
 }
 
 bool LanManager::popGuardianSpawn(string &guardName, int &group)
@@ -826,3 +953,4 @@ bool LanManager::popGuardianSpawn(string &guardName, int &group)
     _hasNewGuardian = false;
     return true;
 }
+
