@@ -635,7 +635,7 @@ void LanManager::handleWsMessage(const string &rawMsg)
 			std::lock_guard<std::mutex> lock(_dataMutex);
 			_statusMsg = "NoSocketId: " + rawMsg.substr(0, 22);
 		}
-	}
+
 	else if (eventName == "realtime:subscription_succeeded" || eventName == "subscription_succeeded" || eventName == "pusher_internal:subscription_succeeded")
 	{
 		_channelSubscribed = true;
