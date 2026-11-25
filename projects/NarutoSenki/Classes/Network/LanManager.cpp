@@ -499,7 +499,16 @@ void LanManager::networkThreadLoop()
 		if (!_running) break;
 
 		// 2. Cek apakah ada data masuk dari server (tunggu maksimal 20ms agar pengiriman tetap responsif)
-				// 3. Baca frame WebSocket yang masuk
+					// 2. Cek apakah ada data masuk dari server (tunggu maksimal 20ms agar pengiriman tetap responsif)
+		fd_set readfds;
+		FD_ZERO(&readfds);
+		FD_SET(sockfd, &readfds);
+		timeval tv{0, 20000};
+		int sel = select((int)sockfd + 1, &readfds, nullptr, nullptr, &tv);
+		if (sel < 0) break;
+		if (sel == 0) continue;
+	
+		// 3. Baca frame WebSocket yang masuk
 		uint8_t hdr[2];
 		if (!recvExactCurl(curl, sockfd, hdr, 2)) break;
 
