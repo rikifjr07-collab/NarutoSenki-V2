@@ -501,7 +501,7 @@ void LanManager::networkThreadLoop()
 			for (size_t i = 0; i < payloadLen; i++) payload[i] ^= maskKey[i % 4];
 		}
 
-				if (opcode == 0x8)
+		if (opcode == 0x8)
 		{
 			if (payloadLen >= 2)
 			{
