@@ -102,7 +102,7 @@ namespace {
                 fd_set readfds;
                 FD_ZERO(&readfds);
                 FD_SET(sockfd, &readfds);
-                timeval tv{5, 0};
+                timeval tv{30, 0};
                 if (select((int)sockfd + 1, &readfds, nullptr, nullptr, &tv) <= 0) return false;
                 continue;
             }
@@ -548,7 +548,7 @@ void LanManager::handleWsMessage(const string &rawMsg)
 	string eventName = extractJsonField(rawMsg, "event");
 	string eventData = extractJsonField(rawMsg, "data");
 
-	if (eventName == "pusher:connection_established" || eventName == "connection_established")
+	if (eventName == "realtime:connection_established")
 	{
 		_socketId = extractJsonField(eventData, "socket_id");
 		if (!_socketId.empty())
@@ -558,12 +558,12 @@ void LanManager::handleWsMessage(const string &rawMsg)
 			string signature = hmacSha256Hex(APINATOR_SECRET, signPayload);
 			string authString = APINATOR_KEY + ":" + signature;
 
-			string subJson = format("{\"event\":\"pusher:subscribe\",\"data\":{\"channel\":\"{}\",\"auth\":\"{}\"}}",
+			string subJson = format("{\"event\":\"realtime:subscribe\",\"data\":{\"channel\":\"{}\",\"auth\":\"{}\"}}",
 									channelName, authString);
 			sendWsFrame(subJson);
 		}
 	}
-	else if (eventName == "pusher_internal:subscription_succeeded" || eventName == "subscription_succeeded")
+	else if (eventName == "realtime:subscription_succeeded")
 	{
 		_channelSubscribed = true;
 		if (_isHost)
@@ -580,9 +580,10 @@ void LanManager::handleWsMessage(const string &rawMsg)
 			sendGamePacket("HELLO:" + _clientTempId);
 		}
 	}
-	else if (eventName == "pusher:error")
+	else if (eventName == "realtime:error" || eventName == "realtime:subscription_error")
 	{
 		string errMsg = extractJsonField(eventData, "message");
+		if (errMsg.empty()) errMsg = extractJsonField(eventData, "error");
 		std::lock_guard<std::mutex> lock(_dataMutex);
 		_statusMsg = "Err: " + (errMsg.empty() ? eventData.substr(0, 25) : errMsg.substr(0, 25));
 	}
