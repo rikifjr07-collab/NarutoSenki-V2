@@ -624,7 +624,7 @@ void LanManager::handleWsMessage(const string &rawMsg)
 			string signature = hmacSha256Hex(APINATOR_SECRET, signPayload);
 			string authString = APINATOR_KEY + ":" + signature;
 
-			string subJson = "{\"event\":\"realtime:subscribe\",\"channel\":\"" + channelName + "\",\"data\":{\"auth\":\"" + authString + "\"}}";
+						string subJson = "{\"event\":\"subscribe\",\"data\":{\"channel\":\"" + channelName + "\",\"auth\":\"" + authString + "\"}}";
 			sendWsFrame(subJson);
 		}
 		else
