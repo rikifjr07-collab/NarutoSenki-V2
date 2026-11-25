@@ -4,6 +4,7 @@
 #include <mutex>
 #include <atomic>
 #include <vector>
+#include <queue>
 
 struct NetSlotData
 {
@@ -144,6 +145,8 @@ private:
 	std::atomic<bool> _gameStarted{false};
     std::atomic<int> _winnerGroup{-1};
     std::atomic<int> _pingMs{0};
+    std::queue<string> _sendQueue;
+
     int _konohaKills = 0;
     int _akatsukiKills = 0;
     bool _hasNewKillReport = false;
@@ -157,6 +160,7 @@ private:
 	int _myPlayerId = 1;
 	string _statusMsg = "Offline";
 
+    
 	std::mutex _dataMutex;
 	NetSlotData _slots[6];
 	vector<NetPlayerInput> _pendingInputs;
