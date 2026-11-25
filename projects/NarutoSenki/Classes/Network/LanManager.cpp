@@ -609,7 +609,7 @@ void LanManager::handleWsMessage(const string &rawMsg)
 	string eventName = extractJsonField(rawMsg, "event");
 	string eventData = extractJsonField(rawMsg, "data");
 
-	if (eventName == "realtime:connection_established" || eventName == "connection_established" || eventName == "pusher:connection_established")
+		if (eventName == "realtime:connection_established" || eventName == "connection_established" || eventName == "pusher:connection_established")
 	{
 		_socketId = extractJsonField(eventData, "socket_id");
 		if (!_socketId.empty())
@@ -619,14 +619,17 @@ void LanManager::handleWsMessage(const string &rawMsg)
 				_statusMsg = "Subscribing " + _roomCode + "...";
 			}
 
-			string channelName = "private-room-" + _roomCode;
-			string signPayload = _socketId + ":" + channelName;
-			string signature = hmacSha256Hex(APINATOR_SECRET, signPayload);
-			string authString = APINATOR_KEY + ":" + signature;
-
-						string subJson = "{\"event\":\"subscribe\",\"data\":{\"channel\":\"" + channelName + "\",\"auth\":\"" + authString + "\"}}";
+			string channelName = "room-" + _roomCode;
+			string subJson = "{\"event\":\"subscribe\",\"data\":{\"channel\":\"" + channelName + "\"}}";
 			sendWsFrame(subJson);
 		}
+		else
+		{
+			std::lock_guard<std::mutex> lock(_dataMutex);
+			_statusMsg = "NoSocketId: " + rawMsg.substr(0, 22);
+		}
+	}
+
 		else
 		{
 			std::lock_guard<std::mutex> lock(_dataMutex);
@@ -679,9 +682,8 @@ void LanManager::handleWsMessage(const string &rawMsg)
 void LanManager::sendApinatorEvent(const string &eventName, const string &payloadData)
 {
 	if (!_wsConnected || !_channelSubscribed) return;
-	string channelName = "private-room-" + _roomCode;
-	string json = format("{\"event\":\"{}\",\"channel\":\"{}\",\"data\":{{\"p\":\"{}\"}}}",
-						 eventName, channelName, escapeJson(payloadData));
+	string channelName = "room-" + _roomCode;
+	string json = "{\"event\":\"" + eventName + "\",\"channel\":\"" + channelName + "\",\"data\":{\"p\":\"" + escapeJson(payloadData) + "\"}}";
 	sendWsFrame(json);
 }
 
