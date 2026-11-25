@@ -271,16 +271,14 @@ void LanManager::disconnect()
     _roomCode = "";
     _nextPlayerId = 2;
 
-	if (_sock >= 0)
+		int oldSock = _sock;
+	_sock = -1;
+	if (oldSock >= 0)
 	{
-		shutdown(_sock, SHUT_RDWR);
-		_sock = -1;
+		shutdown(oldSock, SHUT_RDWR);
+		close(oldSock);
 	}
-	if (_ssl)
-	{
-		curl_easy_cleanup((CURL*)_ssl);
-		_ssl = nullptr;
-	}
+
 
 	std::lock_guard<std::mutex> lock(_dataMutex);
 	for (int i = 0; i < 6; i++)
@@ -400,6 +398,8 @@ void LanManager::networkThreadLoop()
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
 	curl_easy_setopt(curl, CURLOPT_TCP_NODELAY, 1L);
+    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+	curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
 
 	CURLcode res = curl_easy_perform(curl);
 	if (res != CURLE_OK)
@@ -425,7 +425,7 @@ void LanManager::networkThreadLoop()
 	_sock = (int)sockfd;
 
 	string req =
-		"GET /app/" + APINATOR_KEY + " HTTP/1.1\r\n"
+		"GET /app/" + APINATOR_KEY + "?protocol=7&client=cpp&version=1.0 HTTP/1.1\r\n"
 		"Host: " + APINATOR_HOST + "\r\n"
 		"Upgrade: websocket\r\n"
 		"Connection: Upgrade\r\n"
@@ -501,19 +501,23 @@ void LanManager::networkThreadLoop()
 			for (size_t i = 0; i < payloadLen; i++) payload[i] ^= maskKey[i % 4];
 		}
 
-		if (opcode == 0x8) break;
-		else if (opcode == 0x9)
+				if (opcode == 0x8)
 		{
-			std::lock_guard<std::mutex> lock(_sendMutex);
-			uint8_t pong[6] = {0x8A, 0x80, 0x11, 0x22, 0x33, 0x44};
-			sendExactCurl(curl, sockfd, pong, 6);
-		}
-		else if (opcode == 0x1)
-		{
-			string msg((const char*)payload.data(), payloadLen);
-			handleWsMessage(msg);
+			if (payloadLen >= 2)
+			{
+				uint16_t closeCode = (payload[0] << 8) | payload[1];
+				string reasonText = (payloadLen > 2) ? string((const char*)payload.data() + 2, payloadLen - 2) : "";
+				std::lock_guard<std::mutex> lock(_dataMutex);
+				_statusMsg = format("WS {}: {}", closeCode, reasonText.substr(0, 22));
+			}
+			break;
 		}
 	}
+	{
+		std::lock_guard<std::mutex> lock(_sendMutex);
+		_ssl = nullptr;
+	}
+	curl_easy_cleanup(curl);
 
 	if (_running)
 	{
