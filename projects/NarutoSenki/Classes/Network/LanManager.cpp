@@ -492,9 +492,18 @@ void LanManager::networkThreadLoop()
 			}
 			if (!sendWsFrameDirect(curl, sockfd, nextMsg))
 			{
+				std::lock_guard<std::mutex> lock(_dataMutex);
+				_statusMsg = "Gagal Kirim WS!";
 				_running = false;
 				break;
 			}
+			else
+			{
+				std::lock_guard<std::mutex> lock(_dataMutex);
+				if (_statusMsg.find("Subscribing") == 0)
+					_statusMsg = "Sent Sub " + _roomCode + "...";
+			}
+
 		}
 		if (!_running) break;
 
