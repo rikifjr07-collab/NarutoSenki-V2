@@ -519,6 +519,8 @@ void LanManager::networkThreadLoop()
 		// 3. Baca 2 byte header frame WebSocket
 		uint8_t hdr[2];
 		if (!recvExactCurl(curl, sockfd, hdr, 2)) break;
+		uint8_t opcode = hdr[0] & 0x0f;
+		bool masked = (hdr[1] & 0x80) != 0;
 		uint64_t payloadLen = hdr[1] & 0x7f;
 
 		if (payloadLen == 126)
