@@ -546,13 +546,14 @@ void LanManager::networkThreadLoop()
 		{
 			if (payloadLen >= 2)
 			{
-				uint16_t closeCode = ((uint16_t)payload[0] << 8) | (uint16_t)payload[1];
+				uint16_t closeCode = ((uint16_t)payload << 8) | (uint16_t)payload;
 				string reasonText = (payloadLen > 2) ? string((const char*)payload.data() + 2, payloadLen - 2) : "";
 				std::lock_guard<std::mutex> lock(_dataMutex);
-				_statusMsg = format("WS {}: {}", closeCode, reasonText.substr(0, 22));
+				_statusMsg = "WS " + std::to_string(closeCode) + ": " + reasonText.substr(0, 20);
 			}
 			break;
 		}
+
 		else if (opcode == 0x9)
 		{
 			uint8_t pong[6] = {0x8A, 0x80, 0x11, 0x22, 0x33, 0x44};
@@ -604,14 +605,8 @@ void LanManager::handleWsMessage(const string &rawMsg)
 			string signature = hmacSha256Hex(APINATOR_SECRET, signPayload);
 			string authString = APINATOR_KEY + ":" + signature;
 
-			// Kirim format Apinator AsyncAPI & format Pusher-compatible sekaligus
-			string subApinator = format("{\"event\":\"realtime:subscribe\",\"channel\":\"{}\",\"data\":{\"auth\":\"{}\"}}",
-										channelName, authString);
-			string subPusher = format("{\"event\":\"subscribe\",\"data\":{\"channel\":\"{}\",\"auth\":\"{}\"}}",
-									  channelName, authString);
-
-			sendWsFrame(subApinator);
-			sendWsFrame(subPusher);
+			string subJson = "{\"event\":\"subscribe\",\"data\":{\"channel\":\"" + channelName + "\",\"auth\":\"" + authString + "\"}}";
+			sendWsFrame(subJson);
 		}
 		else
 		{
@@ -625,7 +620,7 @@ void LanManager::handleWsMessage(const string &rawMsg)
 		if (_isHost)
 		{
 			std::lock_guard<std::mutex> lock(_dataMutex);
-			_statusMsg = format("Room: {} (1/6)", _roomCode);
+			_statusMsg = "Room: " + _roomCode + " (1/6)";
 		}
 		else if (_isClient)
 		{
@@ -657,7 +652,6 @@ void LanManager::handleWsMessage(const string &rawMsg)
 	}
 	else
 	{
-		// Tampilkan event tak dikenal dari server agar langsung terlihat di layar
 		std::lock_guard<std::mutex> lock(_dataMutex);
 		_statusMsg = "Srv: " + (eventName.empty() ? rawMsg.substr(0, 26) : eventName.substr(0, 26));
 	}
