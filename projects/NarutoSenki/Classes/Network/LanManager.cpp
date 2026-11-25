@@ -508,32 +508,18 @@ void LanManager::networkThreadLoop()
 		if (!_running) break;
 
 				// 2. Cek & baca 2 byte header frame langsung via curl_easy_recv (membaca buffer SSL + socket OS)
+				// 2. Cek apakah ada data masuk dari server (tunggu maksimal 10ms)
+		fd_set readfds;
+		FD_ZERO(&readfds);
+		FD_SET(sockfd, &readfds);
+		timeval tv{0, 10000}; // 10 ms
+		int sel = select((int)sockfd + 1, &readfds, nullptr, nullptr, &tv);
+		if (sel < 0) break;
+		if (sel == 0) continue; // Belum ada data, cek antrean kirim lagi
+
+		// 3. Baca frame WebSocket yang masuk
 		uint8_t hdr[2];
-		size_t gotHdr = 0;
-		while (gotHdr < 2 && _running)
-		{
-			size_t n = 0;
-			CURLcode r = curl_easy_recv(curl, hdr + gotHdr, 2 - gotHdr, &n);
-			if (r == CURLE_AGAIN)
-			{
-				if (gotHdr == 0) break; // Belum ada frame baru masuk, kembali cek _sendQueue
-				fd_set readfds;
-				FD_ZERO(&readfds);
-				FD_SET(sockfd, &readfds);
-				timeval tv{1, 0};
-				if (select((int)sockfd + 1, &readfds, nullptr, nullptr, &tv) <= 0) { _running = false; break; }
-				continue;
-			}
-			if (r != CURLE_OK || n == 0) { _running = false; break; }
-			gotHdr += n;
-		}
-		if (!_running) break;
-		if (gotHdr < 2)
-		{
-			// Belum ada frame masuk, tidur 10ms agar CPU hemat lalu ulangi loop
-			std::this_thread::sleep_for(std::chrono::milliseconds(10));
-			continue;
-		}
+		if (!recvExactCurl(curl, sockfd, hdr, 2)) break;
 
 		uint8_t opcode = hdr[0] & 0x0f;
 		bool masked = (hdr[1] & 0x80) != 0;
