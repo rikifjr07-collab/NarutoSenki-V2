@@ -548,22 +548,37 @@ void LanManager::handleWsMessage(const string &rawMsg)
 	string eventName = extractJsonField(rawMsg, "event");
 	string eventData = extractJsonField(rawMsg, "data");
 
-	if (eventName == "realtime:connection_established" || eventName == "connection_established")
+	if (eventName == "realtime:connection_established" || eventName == "connection_established" || eventName == "pusher:connection_established")
 	{
 		_socketId = extractJsonField(eventData, "socket_id");
 		if (!_socketId.empty())
 		{
+			{
+				std::lock_guard<std::mutex> lock(_dataMutex);
+				_statusMsg = "Subscribing " + _roomCode + "...";
+			}
+
 			string channelName = "private-room-" + _roomCode;
 			string signPayload = _socketId + ":" + channelName;
 			string signature = hmacSha256Hex(APINATOR_SECRET, signPayload);
 			string authString = APINATOR_KEY + ":" + signature;
 
-			string subJson = format("{\"event\":\"subscribe\",\"data\":{\"channel\":\"{}\",\"auth\":\"{}\"}}",
-									channelName, authString);
-			sendWsFrame(subJson);
+			// Kirim format Apinator AsyncAPI & format Pusher-compatible sekaligus
+			string subApinator = format("{\"event\":\"realtime:subscribe\",\"channel\":\"{}\",\"data\":{\"auth\":\"{}\"}}",
+										channelName, authString);
+			string subPusher = format("{\"event\":\"subscribe\",\"data\":{\"channel\":\"{}\",\"auth\":\"{}\"}}",
+									  channelName, authString);
+
+			sendWsFrame(subApinator);
+			sendWsFrame(subPusher);
+		}
+		else
+		{
+			std::lock_guard<std::mutex> lock(_dataMutex);
+			_statusMsg = "NoSocketId: " + rawMsg.substr(0, 22);
 		}
 	}
-	else if (eventName == "realtime:subscription_succeeded" || eventName == "subscription_succeeded")
+	else if (eventName == "realtime:subscription_succeeded" || eventName == "subscription_succeeded" || eventName == "pusher_internal:subscription_succeeded")
 	{
 		_channelSubscribed = true;
 		if (_isHost)
@@ -580,12 +595,16 @@ void LanManager::handleWsMessage(const string &rawMsg)
 			sendGamePacket("HELLO:" + _clientTempId);
 		}
 	}
-	else if (eventName == "realtime:error" || eventName == "realtime:subscription_error")
+	else if (eventName == "realtime:ping" || eventName == "pusher:ping")
+	{
+		sendWsFrame("{\"event\":\"realtime:pong\",\"data\":{}}");
+	}
+	else if (eventName == "realtime:error" || eventName == "realtime:subscription_error" || eventName == "pusher:error")
 	{
 		string errMsg = extractJsonField(eventData, "message");
 		if (errMsg.empty()) errMsg = extractJsonField(eventData, "error");
 		std::lock_guard<std::mutex> lock(_dataMutex);
-		_statusMsg = "Err: " + (errMsg.empty() ? eventData.substr(0, 25) : errMsg.substr(0, 25));
+		_statusMsg = "Err: " + (errMsg.empty() ? rawMsg.substr(0, 26) : errMsg.substr(0, 26));
 	}
 	else if (eventName == "client-pkt")
 	{
@@ -595,12 +614,14 @@ void LanManager::handleWsMessage(const string &rawMsg)
 			processGamePacket(pkt);
 		}
 	}
-	else if (!eventName.empty())
+	else
 	{
+		// Tampilkan event tak dikenal dari server agar langsung terlihat di layar
 		std::lock_guard<std::mutex> lock(_dataMutex);
-		_statusMsg = "Ev: " + eventName.substr(0, 24);
+		_statusMsg = "Srv: " + (eventName.empty() ? rawMsg.substr(0, 26) : eventName.substr(0, 26));
 	}
 }
+
 
 void LanManager::sendApinatorEvent(const string &eventName, const string &payloadData)
 {
