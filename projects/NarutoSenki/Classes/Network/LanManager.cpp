@@ -506,18 +506,19 @@ void LanManager::networkThreadLoop()
 
 		}
 		if (!_running) break;
+				// 2. Cek apakah ada data di buffer SSL atau socket tanpa tertahan select()
+		uint8_t hdr[2];
+		size_t nFirst = 0;
+		CURLcode rFirst = curl_easy_recv(curl, hdr, 1, &nFirst);
+		if (rFirst == CURLE_AGAIN)
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+			continue;
+		}
+		if (rFirst != CURLE_OK || nFirst == 0) break;
 
-				// 2. Cek & baca 2 byte header frame langsung via curl_easy_recv (membaca buffer SSL + socket OS)
-				// 2. Cek apakah ada data masuk dari server (tunggu maksimal 10ms)
-		fd_set readfds;
-		FD_ZERO(&readfds);
-		FD_SET(sockfd, &readfds);
-		timeval tv{0, 10000}; // 10 ms
-		int sel = select((int)sockfd + 1, &readfds, nullptr, nullptr, &tv);
-		if (sel < 0) break;
-		if (sel == 0) continue; // Belum ada data, cek antrean kirim lagi
-
-		// 3. Baca frame WebSocket yang masuk
+		// Byte pertama sudah didapat, baca byte kedua
+		if (!recvExactCurl(curl, sockfd, hdr + 1, 1)) break;
 		uint8_t hdr[2];
 		if (!recvExactCurl(curl, sockfd, hdr, 2)) break;
 
@@ -629,8 +630,9 @@ void LanManager::handleWsMessage(const string &rawMsg)
 			}
 
 			string channelName = "room-" + _roomCode;
-			string subJson = "{\"event\":\"realtime:subscribe\",\"data\":{\"channel\":\"" + channelName + "\"}}";
+			string subJson = "{\"event\":\"realtime:subscribe\",\"channel\":\"" + channelName + "\",\"data\":{\"channel\":\"" + channelName + "\"}}";
 			sendWsFrame(subJson);
+
 		}
 		else
 		{
