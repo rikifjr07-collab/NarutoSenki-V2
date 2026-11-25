@@ -512,7 +512,19 @@ void LanManager::networkThreadLoop()
 			}
 			break;
 		}
+		else if (opcode == 0x9)
+		{
+			std::lock_guard<std::mutex> lock(_sendMutex);
+			uint8_t pong[6] = {0x8A, 0x80, 0x11, 0x22, 0x33, 0x44};
+			sendExactCurl(curl, sockfd, pong, 6);
+		}
+		else if (opcode == 0x1)
+		{
+			string msg((const char*)payload.data(), payloadLen);
+			handleWsMessage(msg);
+		}
 	}
+
 	{
 		std::lock_guard<std::mutex> lock(_sendMutex);
 		_ssl = nullptr;
@@ -526,9 +538,11 @@ void LanManager::networkThreadLoop()
 		_isHost = false;
 		_isClient = false;
 		std::lock_guard<std::mutex> lock(_dataMutex);
-		_statusMsg = "Koneksi Terputus";
+		if (_statusMsg == "Otentikasi Room...")
+			_statusMsg = "Koneksi Terputus";
 	}
 }
+
 void LanManager::handleWsMessage(const string &rawMsg)
 {
 	string eventName = extractJsonField(rawMsg, "event");
@@ -639,23 +653,25 @@ void LanManager::processGamePacket(const string &taggedPkt)
 				broadcastLobbyState();
 			}
 		}
-		else if (pkt.find("MOVE:") == 0)
+				else if (pkt.find("MOVE:") == 0)
 		{
 			int playerId = 0, targetSlot = -1;
 			if (sscanf(pkt.c_str() + 5, "%d,%d", &playerId, &targetSlot) == 2)
 			{
-				std::lock_guard<std::mutex> lock(_dataMutex);
-				if (targetSlot >= 0 && targetSlot < 6 && _slots[targetSlot].ownerId == 0)
 				{
-					for (int i = 0; i < 6; i++)
+					std::lock_guard<std::mutex> lock(_dataMutex);
+					if (targetSlot >= 0 && targetSlot < 6 && _slots[targetSlot].ownerId == 0)
 					{
-						if (_slots[i].ownerId == playerId)
+						for (int i = 0; i < 6; i++)
 						{
-							_slots[targetSlot].ownerId = playerId;
-							_slots[targetSlot].heroName = _slots[i].heroName;
-							_slots[i].ownerId = 0;
-							_slots[i].heroName = "";
-							break;
+							if (_slots[i].ownerId == playerId)
+							{
+								_slots[targetSlot].ownerId = playerId;
+								_slots[targetSlot].heroName = _slots[i].heroName;
+								_slots[i].ownerId = 0;
+								_slots[i].heroName = "";
+								break;
+							}
 						}
 					}
 				}
@@ -669,18 +685,21 @@ void LanManager::processGamePacket(const string &taggedPkt)
 			{
 				int playerId = atoi(pkt.substr(5, comma - 5).c_str());
 				string hName = pkt.substr(comma + 1);
-				std::lock_guard<std::mutex> lock(_dataMutex);
-				for (int i = 0; i < 6; i++)
 				{
-					if (_slots[i].ownerId == playerId)
+					std::lock_guard<std::mutex> lock(_dataMutex);
+					for (int i = 0; i < 6; i++)
 					{
-						_slots[i].heroName = hName;
-						break;
+						if (_slots[i].ownerId == playerId)
+						{
+							_slots[i].heroName = hName;
+							break;
+						}
 					}
 				}
 				broadcastLobbyState();
 			}
 		}
+
 		else if (pkt.find("SURRENDER:") == 0)
 		{
 			int loserGroup = atoi(pkt.substr(10).c_str());
