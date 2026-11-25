@@ -556,9 +556,28 @@ void LanManager::networkThreadLoop()
 
 		else if (opcode == 0x9)
 		{
-			uint8_t pong[6] = {0x8A, 0x80, 0x11, 0x22, 0x33, 0x44};
-			sendExactCurl(curl, sockfd, pong, 6);
+			std::vector<uint8_t> pongFrame;
+			pongFrame.reserve(payloadLen + 6);
+			pongFrame.push_back(0x8A);
+			if (payloadLen <= 125)
+			{
+				pongFrame.push_back(0x80 | (uint8_t)payloadLen);
+			}
+			else
+			{
+				pongFrame.push_back(0x80 | 126);
+				pongFrame.push_back((payloadLen >> 8) & 0xff);
+				pongFrame.push_back(payloadLen & 0xff);
+			}
+			uint8_t pMask[4] = {0x11, 0x22, 0x33, 0x44};
+			pongFrame.insert(pongFrame.end(), pMask, pMask + 4);
+			for (size_t i = 0; i < payloadLen; i++)
+			{
+				pongFrame.push_back(payload.at(i) ^ pMask[i % 4]);
+			}
+			sendExactCurl(curl, sockfd, pongFrame.data(), pongFrame.size());
 		}
+
 		else if (opcode == 0x1)
 		{
 			string msg((const char*)payload.data(), payloadLen);
@@ -605,7 +624,7 @@ void LanManager::handleWsMessage(const string &rawMsg)
 			string signature = hmacSha256Hex(APINATOR_SECRET, signPayload);
 			string authString = APINATOR_KEY + ":" + signature;
 
-			string subJson = "{\"event\":\"subscribe\",\"data\":{\"channel\":\"" + channelName + "\",\"auth\":\"" + authString + "\"}}";
+			string subJson = "{\"event\":\"realtime:subscribe\",\"channel\":\"" + channelName + "\",\"data\":{\"auth\":\"" + authString + "\"}}";
 			sendWsFrame(subJson);
 		}
 		else
