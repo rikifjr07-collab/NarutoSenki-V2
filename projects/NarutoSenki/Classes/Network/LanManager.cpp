@@ -588,6 +588,11 @@ void LanManager::networkThreadLoop()
 		else if (opcode == 0x1)
 		{
 			string msg((const char*)payload.data(), payloadLen);
+			{
+				std::lock_guard<std::mutex> lock(_dataMutex);
+				if (_statusMsg.find("Sent Sub") == 0)
+					_statusMsg = "Rx: " + msg.substr(0, 28);
+			}
 			handleWsMessage(msg);
 		}
 
@@ -627,9 +632,8 @@ void LanManager::handleWsMessage(const string &rawMsg)
 			}
 
 			string channelName = "room-" + _roomCode;
-			string subJson = "{\"event\":\"realtime:subscribe\",\"data\":{\"channel\":\"" + channelName + "\"}}";
+			string subJson = "{\"event\":\"realtime:subscribe\",\"channel\":\"" + channelName + "\",\"data\":{\"channel\":\"" + channelName + "\"}}";
 			sendWsFrame(subJson);
-
 
 		}
 		else
