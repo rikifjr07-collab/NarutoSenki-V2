@@ -346,8 +346,13 @@ bool LanManager::joinHost(const string &roomCodeOrIp)
 bool LanManager::sendWsFrame(const string &text)
 {
 	std::lock_guard<std::mutex> lock(_sendMutex);
-	if (!_ssl || _sock < 0 || !_wsConnected) return false;
+	if (!_wsConnected) return false;
+	_sendQueue.push(text);
+	return true;
+}
 
+bool sendWsFrameDirect(CURL* curl, curl_socket_t sockfd, const string &text)
+{
 	size_t len = text.size();
 	std::vector<uint8_t> frame;
 	frame.reserve(len + 14);
@@ -370,13 +375,13 @@ bool LanManager::sendWsFrame(const string &text)
 			frame.push_back(((uint64_t)len >> (i * 8)) & 0xff);
 	}
 
-	uint8_t mask[4] = {0x37, 0x91, 0x4b, 0xc2};
+	uint8_t mask = {0x37, 0x91, 0x4b, 0xc2};
 	frame.insert(frame.end(), mask, mask + 4);
 
 	for (size_t i = 0; i < len; i++)
 		frame.push_back((uint8_t)text[i] ^ mask[i % 4]);
 
-	return sendExactCurl((CURL*)_ssl, (curl_socket_t)_sock, frame.data(), frame.size());
+	return sendExactCurl(curl, sockfd, frame.data(), frame.size());
 }
 
 void LanManager::networkThreadLoop()
@@ -466,30 +471,58 @@ void LanManager::networkThreadLoop()
 		_statusMsg = "Otentikasi Room...";
 	}
 
-		while (_running && _ssl)
+    while (_running && _ssl)
 	{
-		uint8_t hdr[2];
+		// 1. Kirim semua pesan yang ada di antrean _sendQueue (aman dalam 1 thread)
+		while (_running)
+		{
+			string nextMsg;
+			{
+				std::lock_guard<std::mutex> lock(_sendMutex);
+				if (_sendQueue.empty()) break;
+				nextMsg = _sendQueue.front();
+				_sendQueue.pop();
+			}
+			if (!sendWsFrameDirect(curl, sockfd, nextMsg))
+			{
+				_running = false;
+				break;
+			}
+		}
+		if (!_running) break;
+
+		// 2. Cek apakah ada data masuk dari server (tunggu maksimal 20ms agar pengiriman tetap responsif)
+		fd_set readfds;
+		FD_ZERO(&readfds);
+		FD_SET(sockfd, &readfds);
+		timeval tv{0, 20000}; // 20 ms
+		int sel = select((int)sockfd + 1, &readfds, nullptr, nullptr, &tv);
+		if (sel < 0) break;
+		if (sel == 0) continue; // Belum ada data masuk, ulangi loop untuk cek _sendQueue
+
+		// 3. Baca frame WebSocket yang masuk
+		uint8_t hdr;
 		if (!recvExactCurl(curl, sockfd, hdr, 2)) break;
 
-		uint8_t opcode = hdr[0] & 0x0f;
-		bool masked = (hdr[1] & 0x80) != 0;
-		uint64_t payloadLen = hdr[1] & 0x7f;
+		uint8_t opcode = hdr & 0x0f;
+		bool masked = (hdr & 0x80) != 0;
+		uint64_t payloadLen = hdr & 0x7f;
 
 		if (payloadLen == 126)
 		{
-			uint8_t ext[2];
+			uint8_t ext;
 			if (!recvExactCurl(curl, sockfd, ext, 2)) break;
-			payloadLen = ((uint64_t)ext[0] << 8) | (uint64_t)ext[1];
+			payloadLen = ((uint64_t)ext << 8) | (uint64_t)ext;
 		}
 		else if (payloadLen == 127)
 		{
-			uint8_t ext[8];
+			uint8_t ext;
 			if (!recvExactCurl(curl, sockfd, ext, 8)) break;
 			payloadLen = 0;
 			for (int i = 0; i < 8; i++) payloadLen = (payloadLen << 8) | (uint64_t)ext[i];
 		}
 
-		uint8_t maskKey[4] = {0};
+		uint8_t maskKey = {0};
 		if (masked && !recvExactCurl(curl, sockfd, maskKey, 4)) break;
 
 		if (payloadLen > 1024 * 512) break;
@@ -505,7 +538,7 @@ void LanManager::networkThreadLoop()
 		{
 			if (payloadLen >= 2)
 			{
-				uint16_t closeCode = ((uint16_t)payload[0] << 8) | (uint16_t)payload[1];
+				uint16_t closeCode = ((uint16_t)payload << 8) | (uint16_t)payload;
 				string reasonText = (payloadLen > 2) ? string((const char*)payload.data() + 2, payloadLen - 2) : "";
 				std::lock_guard<std::mutex> lock(_dataMutex);
 				_statusMsg = format("WS {}: {}", closeCode, reasonText.substr(0, 22));
@@ -514,8 +547,7 @@ void LanManager::networkThreadLoop()
 		}
 		else if (opcode == 0x9)
 		{
-			std::lock_guard<std::mutex> lock(_sendMutex);
-			uint8_t pong[6] = {0x8A, 0x80, 0x11, 0x22, 0x33, 0x44};
+			uint8_t pong = {0x8A, 0x80, 0x11, 0x22, 0x33, 0x44};
 			sendExactCurl(curl, sockfd, pong, 6);
 		}
 		else if (opcode == 0x1)
