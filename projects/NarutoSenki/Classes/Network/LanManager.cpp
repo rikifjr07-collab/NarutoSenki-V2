@@ -519,7 +519,6 @@ void LanManager::networkThreadLoop()
 
 		// Byte pertama sudah didapat, baca byte kedua
 		if (!recvExactCurl(curl, sockfd, hdr + 1, 1)) break;
-		uint8_t hdr[2];
 		if (!recvExactCurl(curl, sockfd, hdr, 2)) break;
 
 		uint8_t opcode = hdr[0] & 0x0f;
