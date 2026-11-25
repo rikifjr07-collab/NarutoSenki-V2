@@ -530,7 +530,7 @@ void LanManager::handleWsMessage(const string &rawMsg)
 	string eventName = extractJsonField(rawMsg, "event");
 	string eventData = extractJsonField(rawMsg, "data");
 
-	if (eventName == "connection_established")
+	if (eventName == "pusher:connection_established" || eventName == "connection_established")
 	{
 		_socketId = extractJsonField(eventData, "socket_id");
 		if (!_socketId.empty())
@@ -540,12 +540,12 @@ void LanManager::handleWsMessage(const string &rawMsg)
 			string signature = hmacSha256Hex(APINATOR_SECRET, signPayload);
 			string authString = APINATOR_KEY + ":" + signature;
 
-			string subJson = format("{\"event\":\"subscribe\",\"data\":{\"channel\":\"{}\",\"auth\":\"{}\"}}",
+			string subJson = format("{\"event\":\"pusher:subscribe\",\"data\":{\"channel\":\"{}\",\"auth\":\"{}\"}}",
 									channelName, authString);
 			sendWsFrame(subJson);
 		}
 	}
-	else if (eventName == "subscription_succeeded")
+	else if (eventName == "pusher_internal:subscription_succeeded" || eventName == "subscription_succeeded")
 	{
 		_channelSubscribed = true;
 		if (_isHost)
@@ -562,6 +562,12 @@ void LanManager::handleWsMessage(const string &rawMsg)
 			sendGamePacket("HELLO:" + _clientTempId);
 		}
 	}
+	else if (eventName == "pusher:error")
+	{
+		string errMsg = extractJsonField(eventData, "message");
+		std::lock_guard<std::mutex> lock(_dataMutex);
+		_statusMsg = "Err: " + (errMsg.empty() ? eventData.substr(0, 25) : errMsg.substr(0, 25));
+	}
 	else if (eventName == "client-pkt")
 	{
 		string pkt = extractJsonField(eventData, "p");
@@ -576,8 +582,9 @@ void LanManager::sendApinatorEvent(const string &eventName, const string &payloa
 {
 	if (!_wsConnected || !_channelSubscribed) return;
 	string channelName = "private-room-" + _roomCode;
-	string json = format("{\"event\":\"{}\",\"channel\":\"{}\",\"data\":{{\"p\":\"{}\"}}}",
-						 eventName, channelName, escapeJson(payloadData));
+	string innerData = format("{\"p\":\"{}\"}", escapeJson(payloadData));
+	string json = format("{\"event\":\"{}\",\"channel\":\"{}\",\"data\":\"{}\"}",
+						 eventName, channelName, escapeJson(innerData));
 	sendWsFrame(json);
 }
 
