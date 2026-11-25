@@ -629,9 +629,8 @@ void LanManager::handleWsMessage(const string &rawMsg)
 			}
 
 			string channelName = "room-" + _roomCode;
-			string subJson = "{\"event\":\"subscribe\",\"channel\":\"" + channelName + "\"}";
+			string subJson = "{\"event\":\"realtime:subscribe\",\"data\":{\"channel\":\"" + channelName + "\"}}";
 			sendWsFrame(subJson);
-
 		}
 		else
 		{
