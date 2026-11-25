@@ -466,27 +466,27 @@ void LanManager::networkThreadLoop()
 		_statusMsg = "Otentikasi Room...";
 	}
 
-	while (_running && _ssl)
+		while (_running && _ssl)
 	{
 		uint8_t hdr[2];
 		if (!recvExactCurl(curl, sockfd, hdr, 2)) break;
 
 		uint8_t opcode = hdr[0] & 0x0f;
-		bool masked = (hdr[0] & 0x80) != 0;
+		bool masked = (hdr[1] & 0x80) != 0;
 		uint64_t payloadLen = hdr[1] & 0x7f;
 
 		if (payloadLen == 126)
 		{
 			uint8_t ext[2];
 			if (!recvExactCurl(curl, sockfd, ext, 2)) break;
-			payloadLen = (ext[0] << 8) | ext[1];
+			payloadLen = ((uint64_t)ext[0] << 8) | (uint64_t)ext[1];
 		}
 		else if (payloadLen == 127)
 		{
 			uint8_t ext[8];
 			if (!recvExactCurl(curl, sockfd, ext, 8)) break;
 			payloadLen = 0;
-			for (int i = 0; i < 8; i++) payloadLen = (payloadLen << 8) | ext[i];
+			for (int i = 0; i < 8; i++) payloadLen = (payloadLen << 8) | (uint64_t)ext[i];
 		}
 
 		uint8_t maskKey[4] = {0};
@@ -505,7 +505,7 @@ void LanManager::networkThreadLoop()
 		{
 			if (payloadLen >= 2)
 			{
-				uint16_t closeCode = (payload[0] << 8) | payload[1];
+				uint16_t closeCode = ((uint16_t)payload[0] << 8) | (uint16_t)payload[1];
 				string reasonText = (payloadLen > 2) ? string((const char*)payload.data() + 2, payloadLen - 2) : "";
 				std::lock_guard<std::mutex> lock(_dataMutex);
 				_statusMsg = format("WS {}: {}", closeCode, reasonText.substr(0, 22));
@@ -622,14 +622,12 @@ void LanManager::handleWsMessage(const string &rawMsg)
 	}
 }
 
-
 void LanManager::sendApinatorEvent(const string &eventName, const string &payloadData)
 {
 	if (!_wsConnected || !_channelSubscribed) return;
 	string channelName = "private-room-" + _roomCode;
-	string innerData = format("{\"p\":\"{}\"}", escapeJson(payloadData));
-	string json = format("{\"event\":\"{}\",\"channel\":\"{}\",\"data\":\"{}\"}",
-						 eventName, channelName, escapeJson(innerData));
+	string json = format("{\"event\":\"{}\",\"channel\":\"{}\",\"data\":{{\"p\":\"{}\"}}}",
+						 eventName, channelName, escapeJson(payloadData));
 	sendWsFrame(json);
 }
 
