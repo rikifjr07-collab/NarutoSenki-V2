@@ -546,7 +546,7 @@ void LanManager::networkThreadLoop()
 		{
 			if (payloadLen >= 2)
 			{
-				uint16_t closeCode = ((uint16_t)payload << 8) | (uint16_t)payload;
+				uint16_t closeCode = ((uint16_t)payload.at(0) << 8) | (uint16_t)payload.at(1);
 				string reasonText = (payloadLen > 2) ? string((const char*)payload.data() + 2, payloadLen - 2) : "";
 				std::lock_guard<std::mutex> lock(_dataMutex);
 				_statusMsg = "WS " + std::to_string(closeCode) + ": " + reasonText.substr(0, 20);
