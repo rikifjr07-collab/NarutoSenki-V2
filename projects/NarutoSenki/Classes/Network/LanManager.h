@@ -1,5 +1,7 @@
 #pragma once
 #include "Defines.h"
+#include "LoadBalancing-cpp/inc/Client.h"
+#include "LoadBalancing-cpp/inc/Listener.h"
 #include <thread>
 #include <mutex>
 #include <atomic>
@@ -69,7 +71,7 @@ struct NetMonsterSync
     uint32_t maxHp = 0;
 };
 
-class LanManager
+class LanManager : public ExitGames::LoadBalancing::Listener
 {
 public:
 	static LanManager *getInstance();
@@ -120,21 +122,40 @@ private:
 	~LanManager();
 
 	void networkThreadLoop();
-	bool sendWsFrame(const string &text);
-	void handleWsMessage(const string &rawMsg);
-	void sendApinatorEvent(const string &eventName, const string &payloadData);
-	void sendGamePacket(const string &rawPacket);
+	void sendGamePacket(const string &rawPacket, bool reliable = true);
 	void processGamePacket(const string &pkt);
 	void broadcastLobbyState();
 	void parseLobbyPacket(const string &packet);
 
-		int _sock = -1;
-	void* _sslCtx = nullptr;
-	void* _ssl = nullptr;
+    // --- Photon LoadBalancing Listener Overrides ---
+    void debugReturn(int debugLevel, const ExitGames::Common::JString& string) override {}
+    void connectionErrorReturn(int errorCode) override;
+    void clientErrorReturn(int errorCode) override {}
+    void warningReturn(int warningCode) override {}
+    void serverErrorReturn(int errorCode) override {}
+    void joinRoomEventAction(int playerNr, const ExitGames::Common::JVector<int>& playernrs, const ExitGames::LoadBalancing::Player& player) override {}
+    void leaveRoomEventAction(int playerNr, bool isInactive) override {}
+    void customEventAction(int playerNr, nByte eventCode, const ExitGames::Common::Object& eventContent) override;
+    void connectReturn(int errorCode, const ExitGames::Common::JString& errorString, const ExitGames::Common::JString& region, const ExitGames::Common::JString& cluster) override;
+    void disconnectReturn() override;
+    void createRoomReturn(int localPlayerNr, const ExitGames::Common::Hashtable& gameProperties, const ExitGames::Common::Hashtable& playerProperties, int errorCode, const ExitGames::Common::JString& errorString) override;
+    void joinOrCreateRoomReturn(int localPlayerNr, const ExitGames::Common::Hashtable& gameProperties, const ExitGames::Common::Hashtable& playerProperties, int errorCode, const ExitGames::Common::JString& errorString) override {}
+    void joinRandomOrCreateRoomReturn(int localPlayerNr, const ExitGames::Common::Hashtable& gameProperties, const ExitGames::Common::Hashtable& playerProperties, int errorCode, const ExitGames::Common::JString& errorString) override {}
+    void joinRoomReturn(int localPlayerNr, const ExitGames::Common::Hashtable& gameProperties, const ExitGames::Common::Hashtable& playerProperties, int errorCode, const ExitGames::Common::JString& errorString) override;
+    void joinRandomRoomReturn(int localPlayerNr, const ExitGames::Common::Hashtable& gameProperties, const ExitGames::Common::Hashtable& playerProperties, int errorCode, const ExitGames::Common::JString& errorString) override {}
+    void leaveRoomReturn(int errorCode, const ExitGames::Common::JString& errorString) override {}
+    void joinLobbyReturn() override {}
+    void leaveLobbyReturn() override {}
+
+    struct OutgoingPkt {
+        string data;
+        bool reliable;
+    };
+
+    ExitGames::LoadBalancing::Client* _photonClient = nullptr;
 	std::mutex _sendMutex;
-	bool _wsConnected = false;
+    std::queue<OutgoingPkt> _sendQueue;
 	bool _channelSubscribed = false;
-	string _socketId = "";
 	string _roomCode = "";
 	string _clientTempId = "";
 	int _nextPlayerId = 2;
@@ -145,7 +166,6 @@ private:
 	std::atomic<bool> _gameStarted{false};
     std::atomic<int> _winnerGroup{-1};
     std::atomic<int> _pingMs{0};
-    std::queue<string> _sendQueue;
 
     int _konohaKills = 0;
     int _akatsukiKills = 0;
@@ -160,7 +180,6 @@ private:
 	int _myPlayerId = 1;
 	string _statusMsg = "Offline";
 
-    
 	std::mutex _dataMutex;
 	NetSlotData _slots[6];
 	vector<NetPlayerInput> _pendingInputs;
