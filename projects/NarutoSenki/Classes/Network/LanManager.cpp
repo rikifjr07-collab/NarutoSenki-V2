@@ -13,9 +13,9 @@
 #include <cstdlib>
 #include <ctime>
 
-static const string APINATOR_HOST    = "ws-eu.apinator.io";
-static const string APINATOR_KEY     = "app_d8d27a49ce4cdf73da83ac5dd033a098a2c0045a";
-static const string APINATOR_SECRET  = "526c5f1907320c7666836ffbb48fa48fe26cf22924257bbac7d7eb9b4df6e192";
+static const string APINATOR_HOST    = "realtime-pusher.ably.io";
+static const string APINATOR_KEY     = "FXo4bQ.56ElPw";
+static const string APINATOR_SECRET  = "3h-vrhvAyyltnH6Q7XiGwP7IXyqW73GF04QirESStOA";
 
 namespace {
     static const uint32_t k256[64] = {
@@ -437,7 +437,7 @@ void LanManager::networkThreadLoop()
 	_sock = (int)sockfd;
 
 	string req =
-		"GET /app/" + APINATOR_KEY + " HTTP/1.1\r\n"
+		"GET /app/" + APINATOR_KEY + "?protocol=7&client=cpp&version=1.0 HTTP/1.1\r\n"
 		"Host: " + APINATOR_HOST + "\r\n"
 		"Upgrade: websocket\r\n"
 		"Connection: Upgrade\r\n"
@@ -637,7 +637,7 @@ void LanManager::handleWsMessage(const string &rawMsg)
 			string authString = APINATOR_KEY + ":" + signature;
 
 			string innerData = "{\"channel\":\"" + channelName + "\",\"auth\":\"" + authString + "\"}";
-			string subJson = "{\"event\":\"realtime:subscribe\",\"data\":\"" + escapeJson(innerData) + "\"}";
+			string subJson = "{\"event\":\"pusher:subscribe\",\"data\":\"" + escapeJson(innerData) + "\"}";
 			sendWsFrame(subJson);
 		}
 		else
@@ -665,7 +665,7 @@ void LanManager::handleWsMessage(const string &rawMsg)
 	}
 	else if (eventName == "realtime:ping" || eventName == "pusher:ping")
 	{
-		sendWsFrame("{\"event\":\"realtime:pong\",\"data\":\"{}\"}");
+		sendWsFrame("{\"event\":\"pusher:pong\",\"data\":\"{}\"}");
 	}
 	else if (eventName == "realtime:error" || eventName == "realtime:subscription_error" || eventName == "pusher:error")
 	{
