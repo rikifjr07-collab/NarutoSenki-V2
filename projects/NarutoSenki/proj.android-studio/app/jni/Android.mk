@@ -1,15 +1,27 @@
 LOCAL_PATH := $(call my-dir)
 COCOS_ROOT := $(LOCAL_PATH)/../../../../../
+PHOTON_DIR := $(COCOS_ROOT)/external/photon
 
-# --- Prebuilt OpenSSL ---
+# --- Auto-detect Folder Photon v6.0.2 ---
+PHOTON_INC_ROOT := $(dir $(firstword $(shell find $(PHOTON_DIR) -name "LoadBalancing-cpp")))
+COMMON_LIB := $(firstword $(shell find $(PHOTON_DIR) -name "libcommon-cpp-static*android_$(TARGET_ARCH_ABI)*.a" -o -name "common-cpp-static*android_$(TARGET_ARCH_ABI)*.a"))
+PHOTON_LIB := $(firstword $(shell find $(PHOTON_DIR) -name "libphoton-cpp-static*android_$(TARGET_ARCH_ABI)*.a" -o -name "photon-cpp-static*android_$(TARGET_ARCH_ABI)*.a"))
+LB_LIB := $(firstword $(shell find $(PHOTON_DIR) -name "libloadbalancing-cpp-static*android_$(TARGET_ARCH_ABI)*.a" -o -name "loadbalancing-cpp-static*android_$(TARGET_ARCH_ABI)*.a"))
+
+# --- Prebuilt Photon Realtime C++ SDK ---
 include $(CLEAR_VARS)
-LOCAL_MODULE := openssl_crypto_static
-LOCAL_SRC_FILES := $(COCOS_ROOT)/cocos2dx/platform/third_party/android/prebuilt/openssl/libs/$(TARGET_ARCH_ABI)/libcrypto.a
+LOCAL_MODULE := common_cpp_static
+LOCAL_SRC_FILES := $(COMMON_LIB)
 include $(PREBUILT_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
-LOCAL_MODULE := openssl_ssl_static
-LOCAL_SRC_FILES := $(COCOS_ROOT)/cocos2dx/platform/third_party/android/prebuilt/openssl/libs/$(TARGET_ARCH_ABI)/libssl.a
+LOCAL_MODULE := photon_cpp_static
+LOCAL_SRC_FILES := $(PHOTON_LIB)
+include $(PREBUILT_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := loadbalancing_cpp_static
+LOCAL_SRC_FILES := $(LB_LIB)
 include $(PREBUILT_STATIC_LIBRARY)
 
 # --- Modul Utama Game ---
@@ -50,10 +62,10 @@ LOCAL_SRC_FILES := narutosenki/main.cpp \
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/../../../Classes \
 					$(LOCAL_PATH)/../../../Classes/Core \
 					$(COCOS_ROOT)/external \
+					$(PHOTON_INC_ROOT) \
 					$(COCOS_ROOT)/external/sqlite3/src \
 					$(COCOS_ROOT)/extensions \
 					$(COCOS_ROOT)/cocos2dx/platform/third_party/android/prebuilt/libcurl/include \
-					$(COCOS_ROOT)/cocos2dx/platform/third_party/android/prebuilt/openssl/include \
     
 LOCAL_WHOLE_STATIC_LIBRARIES += cocos2dx_static
 LOCAL_WHOLE_STATIC_LIBRARIES += cocosdenshion_static
@@ -61,8 +73,9 @@ LOCAL_WHOLE_STATIC_LIBRARIES += cocos_lua_static
 LOCAL_WHOLE_STATIC_LIBRARIES += cocos_extension_static
 LOCAL_WHOLE_STATIC_LIBRARIES += cocos_curl_static
 
-LOCAL_STATIC_LIBRARIES += openssl_ssl_static
-LOCAL_STATIC_LIBRARIES += openssl_crypto_static
+LOCAL_STATIC_LIBRARIES += loadbalancing_cpp_static
+LOCAL_STATIC_LIBRARIES += photon_cpp_static
+LOCAL_STATIC_LIBRARIES += common_cpp_static
 
 include $(BUILD_SHARED_LIBRARY)
 
