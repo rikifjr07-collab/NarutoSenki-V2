@@ -70,7 +70,7 @@ for (int i = 0; i < (int)layer->_CharacterArray.size(); i++)
 
 if (LanManager::getInstance()->isMultiplayer())
 {
-	layer->schedule(schedule_selector(GameLayer::updateNetworkSync), 0.04f);
+	layer->schedule(schedule_selector(GameLayer::updateNetworkSync), 0.08f);
 }
 
 }
