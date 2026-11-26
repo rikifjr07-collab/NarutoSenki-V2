@@ -45,7 +45,7 @@ jobs:
             7z x "$f" -y
           done
           
-          # Salin folder header (Common-cpp, Photon-cpp, LoadBalancing-cpp) ke external/photon/inc
+          # Salin folder header (Common-cpp, Photon-cpp, LoadBalancing-cpp)
           for mod in Common-cpp Photon-cpp LoadBalancing-cpp; do
             FOUND_DIR=$(find /tmp/photon_raw -type d -name "$mod" | head -n 1)
             if [ -n "$FOUND_DIR" ]; then
@@ -53,13 +53,16 @@ jobs:
             fi
           done
           
-          # Salin semua file .a Android armeabi-v7a ke external/photon/libs
-          find /tmp/photon_raw -name "*android*armeabi-v7a*.a" -exec cp {} "$PHOTON_DIR/libs/" \;
+          # Cari dan salin file .a release armeabi-v7a dengan nama tetap agar pasti ketemu
+          echo "=== Semua file .a yang ditemukan di arsip ==="
+          find /tmp/photon_raw -name "*.a"
           
-          echo "=== Header Photon ==="
-          ls -la "$PHOTON_DIR/inc"
-          echo "=== Library .a Photon ==="
-          ls -la "$PHOTON_DIR/libs"
+          cp $(find /tmp/photon_raw -name "*common*release*armeabi-v7a*.a" | head -n 1) "$PHOTON_DIR/libs/libcommon.a"
+          cp $(find /tmp/photon_raw -name "*photon*release*armeabi-v7a*.a" | head -n 1) "$PHOTON_DIR/libs/libphoton.a"
+          cp $(find /tmp/photon_raw -name "*loadbalancing*release*armeabi-v7a*.a" | head -n 1) "$PHOTON_DIR/libs/libloadbalancing.a"
+          
+          echo "=== Hasil akhir external/photon ==="
+          ls -la "$PHOTON_DIR/inc" "$PHOTON_DIR/libs"
           rm -rf /tmp/photon_raw
 
       - name: Setup Java JDK 8 (Untuk Gradle)
