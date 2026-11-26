@@ -154,9 +154,9 @@ void LanManager::networkThreadLoop()
 	_photonClient = client;
 
 	// Paksa terhubung ke server Singapura (asia) agar ping rendah (25-45ms)
-	ConnectOptions connOpts;
-	connOpts.setBestRegionSummary(L"asia");
-	if (!client->connect(connOpts))
+	    // Terhubung otomatis ke server region ping terendah (Singapura/Asia)
+    if (!client->connect())
+
 	{
 		std::lock_guard<std::mutex> lock(_dataMutex);
 		_statusMsg = "Gagal Init Photon";
