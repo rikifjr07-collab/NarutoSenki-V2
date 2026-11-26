@@ -32,21 +32,24 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/21.4.7075529" >> $GITHUB_ENV
           echo "NDK_ROOT=$ANDROID_HOME/ndk/21.4.7075529" >> $GITHUB_ENV
 
-      - name: Download & Extract Photon C++ SDK
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Download & Setup Photon C++ SDK v6.0.2
         run: |
           PHOTON_DIR="$GITHUB_WORKSPACE/external/photon"
           mkdir -p "$PHOTON_DIR"
           cd /tmp
-          gh release download photon-sdk -p "*.zip" -O photon.zip
-          unzip -q photon.zip -d photon_extracted
-          # Pindahkan folder Common-cpp, Photon-cpp, dan LoadBalancing-cpp ke external/photon
-          SDK_ROOT=$(find photon_extracted -maxdepth 2 -name "Common-cpp" -exec dirname {} \; | head -n 1)
-          cp -r "$SDK_ROOT/Common-cpp" "$PHOTON_DIR/"
-          cp -r "$SDK_ROOT/Photon-cpp" "$PHOTON_DIR/"
-          cp -r "$SDK_ROOT/LoadBalancing-cpp" "$PHOTON_DIR/"
-          rm -rf /tmp/photon.zip /tmp/photon_extracted
+          
+          # Unduh Core (.a libraries) dan Legacy C++ Headers (.h)
+          curl -L -o core.7z "https://downloads.photonengine.com/download/realtime-core/photon-realtime-core-6.0.2-stable-635.7z"
+          curl -L -o headers.7z "https://downloads.photonengine.com/download/realtime-headers/legacy-photon-realtime-headers-6.0.2-stable-635.7z"
+          
+          # Ekstrak keduanya ke dalam external/photon
+          7z x core.7z -o"$PHOTON_DIR" -y
+          7z x headers.7z -o"$PHOTON_DIR" -y
+          
+          # Tampilkan struktur folder hasil ekstrak di log untuk verifikasi
+          echo "=== Struktur Folder Photon ==="
+          find "$PHOTON_DIR" -maxdepth 4
+          rm -f /tmp/core.7z /tmp/headers.7z
 
       - name: Setup Java JDK 8 (Untuk Gradle)
         uses: actions/setup-java@v4
