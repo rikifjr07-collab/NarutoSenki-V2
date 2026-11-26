@@ -40,8 +40,8 @@ jobs:
           mkdir -p "$PHOTON_DIR"
           cd /tmp
           
-          # Unduh kedua file .7z langsung dari GitHub Release milikmu sendiri
-          gh release download photon-sdk -p "*.7z"
+          # Unduh kedua file .7z dengan menentukan nama repositori secara eksplisit
+          gh release download photon-sdk -R "${{ github.repository }}" -p "*.7z"
           
           # Ekstrak semua file .7z ke dalam external/photon
           for f in *.7z; do
@@ -52,6 +52,7 @@ jobs:
           echo "=== Struktur Folder Photon ==="
           find "$PHOTON_DIR" -maxdepth 4
           rm -f /tmp/*.7z
+
 
       - name: Setup Java JDK 8 (Untuk Gradle)
         uses: actions/setup-java@v4
