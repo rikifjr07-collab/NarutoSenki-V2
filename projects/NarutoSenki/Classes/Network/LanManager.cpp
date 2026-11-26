@@ -437,7 +437,7 @@ void LanManager::networkThreadLoop()
 	_sock = (int)sockfd;
 
 	string req =
-		"GET /app/" + APINATOR_KEY + "?protocol=7&client=cpp&version=1.0 HTTP/1.1\r\n"
+		"GET /app/" + APINATOR_KEY + " HTTP/1.1\r\n"
 		"Host: " + APINATOR_HOST + "\r\n"
 		"Upgrade: websocket\r\n"
 		"Connection: Upgrade\r\n"
@@ -632,9 +632,8 @@ void LanManager::handleWsMessage(const string &rawMsg)
 			}
 
 			string channelName = "room-" + _roomCode;
-			string subJson = "{\"event\":\"realtime:subscribe\",\"channel\":\"" + channelName + "\",\"data\":{\"channel\":\"" + channelName + "\"}}";
+			string subJson = "{\"event\":\"realtime:subscribe\",\"data\":{\"channel\":\"" + channelName + "\"}}";
 			sendWsFrame(subJson);
-
 		}
 		else
 		{
