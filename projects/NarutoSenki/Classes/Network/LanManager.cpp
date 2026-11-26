@@ -511,7 +511,7 @@ void LanManager::networkThreadLoop()
 		fd_set readfds;
 		FD_ZERO(&readfds);
 		FD_SET(sockfd, &readfds);
-		timeval tv{0, 10000};
+		timeval tv{0, 1000};
 		int sel = select((int)sockfd + 1, &readfds, nullptr, nullptr, &tv);
 		if (sel < 0) break;
 		if (sel == 0) continue;
