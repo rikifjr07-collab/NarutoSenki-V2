@@ -747,7 +747,11 @@ void GameLayer::updateNetworkSync(float dt)
 		}
 
 		// 1. Kirim status 6 Hero
-				vector<NetHeroSync> snapshot;
+				static int s_netTick = 0;
+		s_netTick++;
+
+		// 1. Kirim status 6 Hero (setiap 0.08 detik)
+		vector<NetHeroSync> snapshot;
 		for (auto hero : _CharacterArray)
 		{
 			if (!hero) continue;
@@ -779,48 +783,56 @@ void GameLayer::updateNetworkSync(float dt)
 		}
 		lan->broadcastWorldState(snapshot);
 
-
-		// 2. Kirim status Minion (Flog)
-		vector<NetFlogSync> flogSnap;
-		for (int idx = 0; idx < (int)_KonohaFlogArray.size(); idx++)
+		// 2. Kirim status Minion (Flog) setiap 3 tick (~0.24 detik)
+		if (s_netTick % 3 == 0)
 		{
-			auto f = _KonohaFlogArray[idx];
-			if (!f || f->getState() == State::DEAD) continue;
-			flogSnap.push_back({0, idx, f->getPositionX(), f->getPositionY(), f->_isFlipped, (int)f->getState(), f->getHP()});
-		}
-		for (int idx = 0; idx < (int)_AkatsukiFlogArray.size(); idx++)
-		{
-			auto f = _AkatsukiFlogArray[idx];
-			if (!f || f->getState() == State::DEAD) continue;
-			flogSnap.push_back({1, idx, f->getPositionX(), f->getPositionY(), f->_isFlipped, (int)f->getState(), f->getHP()});
-		}
-		lan->broadcastFlogState(flogSnap);
-
-		// 3. Kirim status Tower
-		vector<NetTowerSync> towerSnap;
-		for (auto tower : _TowerArray)
-		{
-			if (!tower) continue;
-			towerSnap.push_back({tower->getCharId(), tower->getHP(), tower->getMaxHP()});
-		}
-		lan->broadcastTowerState(towerSnap);
-
-		// 4. Kirim status Summon, Boneka, Serangga & Rasenshuriken
-		vector<NetMonsterSync> monSnap;
-		for (auto hero : _CharacterArray)
-		{
-			if (!hero) continue;
-			auto &mArr = hero->getMonsterArray();
-			for (int mIdx = 0; mIdx < (int)mArr.size(); mIdx++)
+			vector<NetFlogSync> flogSnap;
+			for (int idx = 0; idx < (int)_KonohaFlogArray.size(); idx++)
 			{
-				auto mo = mArr[mIdx];
-				if (!mo || mo->getState() == State::DEAD) continue;
-				monSnap.push_back({hero->getCharId(), mIdx, mo->getName(),
-								   mo->getPositionX(), mo->getPositionY(),
-								   mo->_isFlipped, (int)mo->getState(), mo->getHP(), mo->getMaxHP()});
+				auto f = _KonohaFlogArray[idx];
+				if (!f || f->getState() == State::DEAD) continue;
+				flogSnap.push_back({0, idx, f->getPositionX(), f->getPositionY(), f->_isFlipped, (int)f->getState(), f->getHP()});
 			}
+			for (int idx = 0; idx < (int)_AkatsukiFlogArray.size(); idx++)
+			{
+				auto f = _AkatsukiFlogArray[idx];
+				if (!f || f->getState() == State::DEAD) continue;
+				flogSnap.push_back({1, idx, f->getPositionX(), f->getPositionY(), f->_isFlipped, (int)f->getState(), f->getHP()});
+			}
+			lan->broadcastFlogState(flogSnap);
 		}
-		lan->broadcastMonsterState(monSnap);
+
+		// 3. Kirim status Tower setiap 6 tick (~0.48 detik)
+		if (s_netTick % 6 == 0)
+		{
+			vector<NetTowerSync> towerSnap;
+			for (auto tower : _TowerArray)
+			{
+				if (!tower) continue;
+				towerSnap.push_back({tower->getCharId(), tower->getHP(), tower->getMaxHP()});
+			}
+			lan->broadcastTowerState(towerSnap);
+		}
+
+		// 4. Kirim status Summon, Boneka, Serangga & Rasenshuriken setiap 2 tick (~0.16 detik)
+		if (s_netTick % 2 == 0)
+		{
+			vector<NetMonsterSync> monSnap;
+			for (auto hero : _CharacterArray)
+			{
+				if (!hero) continue;
+				auto &mArr = hero->getMonsterArray();
+				for (int mIdx = 0; mIdx < (int)mArr.size(); mIdx++)
+				{
+					auto mo = mArr[mIdx];
+					if (!mo || mo->getState() == State::DEAD) continue;
+					monSnap.push_back({hero->getCharId(), mIdx, mo->getName(),
+									   mo->getPositionX(), mo->getPositionY(),
+									   mo->_isFlipped, (int)mo->getState(), mo->getHP(), mo->getMaxHP()});
+				}
+			}
+			lan->broadcastMonsterState(monSnap);
+		}
 	}
 	else if (lan->isClient())
 	{
@@ -1266,11 +1278,20 @@ void GameLayer::JoyStickUpdate(Vec2 direction)
     }
     if (LanManager::getInstance()->isClient() && currentPlayer)
     {
-        LanManager::getInstance()->sendClientInput(
-            direction.x, direction.y, -1, currentPlayer->getPositionX(), currentPlayer->getPositionY(), currentPlayer->_isFlipped);
+        static auto s_lastJoySend = std::chrono::steady_clock::now();
+        static bool s_lastSentFlip = false;
+        auto now = std::chrono::steady_clock::now();
+        long long elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - s_lastJoySend).count();
+
+        if (elapsedMs >= 60 || s_lastSentFlip != currentPlayer->_isFlipped)
+        {
+            s_lastJoySend = now;
+            s_lastSentFlip = currentPlayer->_isFlipped;
+            LanManager::getInstance()->sendClientInput(
+                direction.x, direction.y, -1, currentPlayer->getPositionX(), currentPlayer->getPositionY(), currentPlayer->_isFlipped);
+        }
     }
 }
-
 
 void GameLayer::attackButtonClick(ABType type)
 {
