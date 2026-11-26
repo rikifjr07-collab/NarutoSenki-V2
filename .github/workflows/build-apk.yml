@@ -37,22 +37,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           PHOTON_DIR="$GITHUB_WORKSPACE/external/photon"
-          mkdir -p "$PHOTON_DIR"
-          cd /tmp
+          mkdir -p "$PHOTON_DIR/inc" "$PHOTON_DIR/libs" /tmp/photon_raw
+          cd /tmp/photon_raw
           
-          # Unduh kedua file .7z dengan menentukan nama repositori secara eksplisit
           gh release download photon-sdk -R "${{ github.repository }}" -p "*.7z"
-          
-          # Ekstrak semua file .7z ke dalam external/photon
           for f in *.7z; do
-            echo "Mengekstrak $f..."
-            7z x "$f" -o"$PHOTON_DIR" -y
+            7z x "$f" -y
           done
           
-          echo "=== Struktur Folder Photon ==="
-          find "$PHOTON_DIR" -maxdepth 4
-          rm -f /tmp/*.7z
-
+          # Salin folder header (Common-cpp, Photon-cpp, LoadBalancing-cpp) ke external/photon/inc
+          for mod in Common-cpp Photon-cpp LoadBalancing-cpp; do
+            FOUND_DIR=$(find /tmp/photon_raw -type d -name "$mod" | head -n 1)
+            if [ -n "$FOUND_DIR" ]; then
+              cp -r "$FOUND_DIR" "$PHOTON_DIR/inc/"
+            fi
+          done
+          
+          # Salin semua file .a Android armeabi-v7a ke external/photon/libs
+          find /tmp/photon_raw -name "*android*armeabi-v7a*.a" -exec cp {} "$PHOTON_DIR/libs/" \;
+          
+          echo "=== Header Photon ==="
+          ls -la "$PHOTON_DIR/inc"
+          echo "=== Library .a Photon ==="
+          ls -la "$PHOTON_DIR/libs"
+          rm -rf /tmp/photon_raw
 
       - name: Setup Java JDK 8 (Untuk Gradle)
         uses: actions/setup-java@v4
