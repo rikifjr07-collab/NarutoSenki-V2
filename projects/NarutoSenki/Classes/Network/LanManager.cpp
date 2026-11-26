@@ -13,9 +13,9 @@
 #include <cstdlib>
 #include <ctime>
 
-static const string APINATOR_HOST    = "ws-us.apinator.io";
-static const string APINATOR_KEY     = "app_7d6ca9a2be2744b70e2a95f3824f7d9d671562ed";
-static const string APINATOR_SECRET  = "f876dc1769e25a3d8dac1218d0b7659795ac5cc1128337b85309b82f4854c143";
+static const string APINATOR_HOST    = "ws-eu.apinator.io";
+static const string APINATOR_KEY     = "app_d8d27a49ce4cdf73da83ac5dd033a098a2c0045a";
+static const string APINATOR_SECRET  = "526c5f1907320c7666836ffbb48fa48fe26cf22924257bbac7d7eb9b4df6e192";
 
 namespace {
     static const uint32_t k256[64] = {
