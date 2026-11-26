@@ -53,14 +53,10 @@ jobs:
             fi
           done
           
-          # Tampilkan semua file .a khusus Android yang ada di arsip
-          echo "=== File .a khusus Android ==="
-          find /tmp/photon_raw -path "*android*" -name "*.a"
-          
-          # Salin file .a release untuk Android 32-bit ARM (arm / armv7)
-          cp $(find /tmp/photon_raw -path "*android*" -iname "*common-cpp*arm*release*.a" ! -iname "*arm64*" | head -n 1) "$PHOTON_DIR/libs/libcommon.a"
-          cp $(find /tmp/photon_raw -path "*android*" -iname "*photon-cpp*arm*release*.a" ! -iname "*arm64*" | head -n 1) "$PHOTON_DIR/libs/libphoton.a"
-          cp $(find /tmp/photon_raw -path "*android*" -iname "*loadbalancing-cpp*arm*release*.a" ! -iname "*arm64*" | head -n 1) "$PHOTON_DIR/libs/libloadbalancing.a"
+          # Salin file .a release untuk Android arm64-v8a
+          cp $(find /tmp/photon_raw -path "*android/arm64-v8a*" -iname "*Common-cpp*release*.a" | head -n 1) "$PHOTON_DIR/libs/libcommon.a"
+          cp $(find /tmp/photon_raw -path "*android/arm64-v8a*" -iname "*Photon-cpp*release*.a" | head -n 1) "$PHOTON_DIR/libs/libphoton.a"
+          cp $(find /tmp/photon_raw -path "*android/arm64-v8a*" -iname "*LoadBalancing-cpp*release*.a" | head -n 1) "$PHOTON_DIR/libs/libloadbalancing.a"
           
           echo "=== Hasil akhir external/photon ==="
           ls -la "$PHOTON_DIR/inc" "$PHOTON_DIR/libs"
