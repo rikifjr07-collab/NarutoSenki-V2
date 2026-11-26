@@ -47,19 +47,20 @@ jobs:
           
           # Salin folder header (Common-cpp, Photon-cpp, LoadBalancing-cpp)
           for mod in Common-cpp Photon-cpp LoadBalancing-cpp; do
-            FOUND_DIR=$(find /tmp/photon_raw -type d -name "$mod" | head -n 1)
+            FOUND_DIR=$(find /tmp/photon_raw -type d -iname "$mod" | head -n 1)
             if [ -n "$FOUND_DIR" ]; then
               cp -r "$FOUND_DIR" "$PHOTON_DIR/inc/"
             fi
           done
           
-          # Cari dan salin file .a release armeabi-v7a dengan nama tetap agar pasti ketemu
-          echo "=== Semua file .a yang ditemukan di arsip ==="
-          find /tmp/photon_raw -name "*.a"
+          # Tampilkan semua file .a khusus Android yang ada di arsip
+          echo "=== File .a khusus Android ==="
+          find /tmp/photon_raw -path "*android*" -name "*.a"
           
-          cp $(find /tmp/photon_raw -name "*common*release*armeabi-v7a*.a" | head -n 1) "$PHOTON_DIR/libs/libcommon.a"
-          cp $(find /tmp/photon_raw -name "*photon*release*armeabi-v7a*.a" | head -n 1) "$PHOTON_DIR/libs/libphoton.a"
-          cp $(find /tmp/photon_raw -name "*loadbalancing*release*armeabi-v7a*.a" | head -n 1) "$PHOTON_DIR/libs/libloadbalancing.a"
+          # Salin file .a release untuk Android 32-bit ARM (arm / armv7)
+          cp $(find /tmp/photon_raw -path "*android*" -iname "*common-cpp*arm*release*.a" ! -iname "*arm64*" | head -n 1) "$PHOTON_DIR/libs/libcommon.a"
+          cp $(find /tmp/photon_raw -path "*android*" -iname "*photon-cpp*arm*release*.a" ! -iname "*arm64*" | head -n 1) "$PHOTON_DIR/libs/libphoton.a"
+          cp $(find /tmp/photon_raw -path "*android*" -iname "*loadbalancing-cpp*arm*release*.a" ! -iname "*arm64*" | head -n 1) "$PHOTON_DIR/libs/libloadbalancing.a"
           
           echo "=== Hasil akhir external/photon ==="
           ls -la "$PHOTON_DIR/inc" "$PHOTON_DIR/libs"
