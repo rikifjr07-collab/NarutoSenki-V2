@@ -33,23 +33,25 @@ jobs:
           echo "NDK_ROOT=$ANDROID_HOME/ndk/21.4.7075529" >> $GITHUB_ENV
 
       - name: Download & Setup Photon C++ SDK v6.0.2
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           PHOTON_DIR="$GITHUB_WORKSPACE/external/photon"
           mkdir -p "$PHOTON_DIR"
           cd /tmp
           
-          # Unduh Core (.a libraries) dan Legacy C++ Headers (.h)
-          curl -L -o core.7z "https://downloads.photonengine.com/download/realtime-core/photon-realtime-core-6.0.2-stable-635.7z"
-          curl -L -o headers.7z "https://downloads.photonengine.com/download/realtime-headers/legacy-photon-realtime-headers-6.0.2-stable-635.7z"
+          # Unduh kedua file .7z langsung dari GitHub Release milikmu sendiri
+          gh release download photon-sdk -p "*.7z"
           
-          # Ekstrak keduanya ke dalam external/photon
-          7z x core.7z -o"$PHOTON_DIR" -y
-          7z x headers.7z -o"$PHOTON_DIR" -y
+          # Ekstrak semua file .7z ke dalam external/photon
+          for f in *.7z; do
+            echo "Mengekstrak $f..."
+            7z x "$f" -o"$PHOTON_DIR" -y
+          done
           
-          # Tampilkan struktur folder hasil ekstrak di log untuk verifikasi
           echo "=== Struktur Folder Photon ==="
           find "$PHOTON_DIR" -maxdepth 4
-          rm -f /tmp/core.7z /tmp/headers.7z
+          rm -f /tmp/*.7z
 
       - name: Setup Java JDK 8 (Untuk Gradle)
         uses: actions/setup-java@v4
