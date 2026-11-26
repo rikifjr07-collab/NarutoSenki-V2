@@ -5,17 +5,17 @@ PHOTON_DIR := $(COCOS_ROOT)/external/photon
 # --- Prebuilt Photon Realtime C++ SDK ---
 include $(CLEAR_VARS)
 LOCAL_MODULE := common_cpp_static
-LOCAL_SRC_FILES := $(PHOTON_DIR)/libs/common-cpp-static_release_android_armeabi-v7a_libc++.a
+LOCAL_SRC_FILES := $(PHOTON_DIR)/libs/libcommon.a
 include $(PREBUILT_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := photon_cpp_static
-LOCAL_SRC_FILES := $(PHOTON_DIR)/libs/photon-cpp-static_release_android_armeabi-v7a_libc++.a
+LOCAL_SRC_FILES := $(PHOTON_DIR)/libs/libphoton.a
 include $(PREBUILT_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := loadbalancing_cpp_static
-LOCAL_SRC_FILES := $(PHOTON_DIR)/libs/loadbalancing-cpp-static_release_android_armeabi-v7a_libc++.a
+LOCAL_SRC_FILES := $(PHOTON_DIR)/libs/libloadbalancing.a
 include $(PREBUILT_STATIC_LIBRARY)
 
 # --- Modul Utama Game ---
