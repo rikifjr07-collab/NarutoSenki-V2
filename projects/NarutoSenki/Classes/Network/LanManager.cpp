@@ -862,7 +862,7 @@ void LanManager::processGamePacket(const string &taggedPkt)
 			long long sentTime = std::stoll(pkt.substr(5));
 			auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
 				std::chrono::steady_clock::now().time_since_epoch()).count();
-			int rtt = static_cast<int>(now - sentTime);
+			int rtt = static_cast<int>((now - sentTime) / 2);
 			_pingMs = (rtt < 0) ? 0 : rtt;
 		}
 		else if (pkt.find("WS:") == 0)
