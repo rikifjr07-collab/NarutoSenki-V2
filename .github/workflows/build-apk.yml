@@ -32,34 +32,21 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/21.4.7075529" >> $GITHUB_ENV
           echo "NDK_ROOT=$ANDROID_HOME/ndk/21.4.7075529" >> $GITHUB_ENV
 
-      - name: Build OpenSSL for Android (arm64-v8a & armeabi-v7a)
+      - name: Download & Extract Photon C++ SDK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          OPENSSL_DIR="$GITHUB_WORKSPACE/cocos2dx/platform/third_party/android/prebuilt/openssl"
-          mkdir -p "$OPENSSL_DIR/libs/arm64-v8a"
-          mkdir -p "$OPENSSL_DIR/libs/armeabi-v7a"
-          
+          PHOTON_DIR="$GITHUB_WORKSPACE/external/photon"
+          mkdir -p "$PHOTON_DIR"
           cd /tmp
-          gh repo clone openssl/openssl openssl-src -- --depth 1 --branch OpenSSL_1_1_1w
-          cd openssl-src
-          
-          export ANDROID_NDK_ROOT=$ANDROID_NDK_HOME
-          export PATH=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
-          
-          # 1. Build untuk arm64-v8a
-          ./Configure android-arm64 -D__ANDROID_API__=21 no-shared no-tests
-          make -j$(nproc) build_libs
-          cp -r include "$OPENSSL_DIR/"
-          cp libcrypto.a libssl.a "$OPENSSL_DIR/libs/arm64-v8a/"
-          
-          # 2. Bersihkan dan build untuk armeabi-v7a
-          make distclean
-          ./Configure android-arm -D__ANDROID_API__=21 no-shared no-tests
-          make -j$(nproc) build_libs
-          cp libcrypto.a libssl.a "$OPENSSL_DIR/libs/armeabi-v7a/"
-          
-          rm -rf /tmp/openssl-src
+          gh release download photon-sdk -p "*.zip" -O photon.zip
+          unzip -q photon.zip -d photon_extracted
+          # Pindahkan folder Common-cpp, Photon-cpp, dan LoadBalancing-cpp ke external/photon
+          SDK_ROOT=$(find photon_extracted -maxdepth 2 -name "Common-cpp" -exec dirname {} \; | head -n 1)
+          cp -r "$SDK_ROOT/Common-cpp" "$PHOTON_DIR/"
+          cp -r "$SDK_ROOT/Photon-cpp" "$PHOTON_DIR/"
+          cp -r "$SDK_ROOT/LoadBalancing-cpp" "$PHOTON_DIR/"
+          rm -rf /tmp/photon.zip /tmp/photon_extracted
 
       - name: Setup Java JDK 8 (Untuk Gradle)
         uses: actions/setup-java@v4
