@@ -2,26 +2,20 @@ LOCAL_PATH := $(call my-dir)
 COCOS_ROOT := $(LOCAL_PATH)/../../../../../
 PHOTON_DIR := $(COCOS_ROOT)/external/photon
 
-# --- Auto-detect Folder Photon v6.0.2 ---
-PHOTON_INC_ROOT := $(dir $(firstword $(shell find $(PHOTON_DIR) -name "LoadBalancing-cpp")))
-COMMON_LIB := $(firstword $(shell find $(PHOTON_DIR) -name "libcommon-cpp-static*android_$(TARGET_ARCH_ABI)*.a" -o -name "common-cpp-static*android_$(TARGET_ARCH_ABI)*.a"))
-PHOTON_LIB := $(firstword $(shell find $(PHOTON_DIR) -name "libphoton-cpp-static*android_$(TARGET_ARCH_ABI)*.a" -o -name "photon-cpp-static*android_$(TARGET_ARCH_ABI)*.a"))
-LB_LIB := $(firstword $(shell find $(PHOTON_DIR) -name "libloadbalancing-cpp-static*android_$(TARGET_ARCH_ABI)*.a" -o -name "loadbalancing-cpp-static*android_$(TARGET_ARCH_ABI)*.a"))
-
 # --- Prebuilt Photon Realtime C++ SDK ---
 include $(CLEAR_VARS)
 LOCAL_MODULE := common_cpp_static
-LOCAL_SRC_FILES := $(COMMON_LIB)
+LOCAL_SRC_FILES := $(PHOTON_DIR)/libs/common-cpp-static_release_android_armeabi-v7a_libc++.a
 include $(PREBUILT_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := photon_cpp_static
-LOCAL_SRC_FILES := $(PHOTON_LIB)
+LOCAL_SRC_FILES := $(PHOTON_DIR)/libs/photon-cpp-static_release_android_armeabi-v7a_libc++.a
 include $(PREBUILT_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := loadbalancing_cpp_static
-LOCAL_SRC_FILES := $(LB_LIB)
+LOCAL_SRC_FILES := $(PHOTON_DIR)/libs/loadbalancing-cpp-static_release_android_armeabi-v7a_libc++.a
 include $(PREBUILT_STATIC_LIBRARY)
 
 # --- Modul Utama Game ---
@@ -62,7 +56,7 @@ LOCAL_SRC_FILES := narutosenki/main.cpp \
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/../../../Classes \
 					$(LOCAL_PATH)/../../../Classes/Core \
 					$(COCOS_ROOT)/external \
-					$(PHOTON_INC_ROOT) \
+					$(PHOTON_DIR)/inc \
 					$(COCOS_ROOT)/external/sqlite3/src \
 					$(COCOS_ROOT)/extensions \
 					$(COCOS_ROOT)/cocos2dx/platform/third_party/android/prebuilt/libcurl/include \
