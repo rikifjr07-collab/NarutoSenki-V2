@@ -28,6 +28,11 @@ LOCAL_MODULE := egssl_static
 LOCAL_SRC_FILES := $(PHOTON_DIR)/libs/libegssl.a
 include $(PREBUILT_STATIC_LIBRARY)
 
+include $(CLEAR_VARS)
+LOCAL_MODULE := websockets_static
+LOCAL_SRC_FILES := $(PHOTON_DIR)/libs/libwebsockets.a
+include $(PREBUILT_STATIC_LIBRARY)
+
 # --- Modul Utama Game ---
 include $(CLEAR_VARS)
 
@@ -80,8 +85,11 @@ LOCAL_WHOLE_STATIC_LIBRARIES += cocos_curl_static
 LOCAL_STATIC_LIBRARIES += loadbalancing_cpp_static
 LOCAL_STATIC_LIBRARIES += photon_cpp_static
 LOCAL_STATIC_LIBRARIES += common_cpp_static
+LOCAL_STATIC_LIBRARIES += websockets_static
 LOCAL_STATIC_LIBRARIES += egssl_static
 LOCAL_STATIC_LIBRARIES += egcrypto_static
+
+LOCAL_LDFLAGS += -Wl,-z,notext
 
 include $(BUILD_SHARED_LIBRARY)
 
