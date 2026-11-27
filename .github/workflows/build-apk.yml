@@ -41,10 +41,16 @@ jobs:
           # Hapus tag <base-extension> di semua package.xml agar Gradle 5.x tidak error parsing
           find "$ANDROID_HOME" -name "package.xml" -exec sed -i '/<base-extension>/,/<\/base-extension>/d' {} +
           
-          # Buat folder platforms kosong agar Gradle versi lama tidak menolak NDK r23b
-          mkdir -p "$ANDROID_HOME/ndk/23.1.7779620/platforms"
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/23.1.7779620" >> $GITHUB_ENV
-          echo "NDK_ROOT=$ANDROID_HOME/ndk/23.1.7779620" >> $GITHUB_ENV
+          # Buat folder platforms & toolchains dummy agar AGP lama tidak menolak NDK r23b
+          NDK_DIR="$ANDROID_HOME/ndk/23.1.7779620"
+          mkdir -p "$NDK_DIR/platforms"
+          for prefix in arm-linux-androideabi aarch64-linux-android x86 x86_64; do
+            mkdir -p "$NDK_DIR/toolchains/${prefix}-4.9/prebuilt/linux-x86_64/bin"
+          done
+          
+          echo "ANDROID_NDK_HOME=$NDK_DIR" >> $GITHUB_ENV
+          echo "NDK_ROOT=$NDK_DIR" >> $GITHUB_ENV
+
           
       - name: Download & Setup Photon C++ SDK v6.0.2
         env:
@@ -110,9 +116,10 @@ jobs:
           find "$GITHUB_WORKSPACE" -name "Android.mk" -exec sed -i "s|LOCAL_C_INCLUDES :=|LOCAL_C_INCLUDES := $GITHUB_WORKSPACE/external/photon/inc|g" {} +
           
           echo "ndk.dir=$ANDROID_NDK_HOME" > local.properties
+          echo "PROP_APP_ABI=arm64-v8a" >> gradle.properties
           chmod +x gradlew
           ./gradlew assembleRelease -PPROP_APP_ABI=arm64-v8a --stacktrace
-          
+
           # Membuat keystore sementara & menandatangani APK
           keytool -genkey -v -keystore release.keystore -alias naruto -keyalg RSA -keysize 2048 -validity 10000 -storepass 123456 -keypass 123456 -dname "CN=NarutoSenki, OU=Dev, O=Game, L=ID, ST=ID, C=ID"
           
