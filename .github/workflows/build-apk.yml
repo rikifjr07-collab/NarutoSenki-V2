@@ -27,10 +27,10 @@ jobs:
 
       - name: Install Android NDK r23b
         run: |
-          # Hapus metadata API 35/36 agar Gradle 5.x tidak gagal membaca XML SDK baru
-          rm -rf $ANDROID_HOME/platforms/android-35 $ANDROID_HOME/platforms/android-36 $ANDROID_HOME/build-tools/35.* $ANDROID_HOME/build-tools/36.* || true
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;23.1.7779620"
+          # Buat folder platforms kosong agar Gradle versi lama tidak menolak NDK r23b
+          mkdir -p "$ANDROID_HOME/ndk/23.1.7779620/platforms"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/23.1.7779620" >> $GITHUB_ENV
           echo "NDK_ROOT=$ANDROID_HOME/ndk/23.1.7779620" >> $GITHUB_ENV
 
