@@ -18,6 +18,16 @@ LOCAL_MODULE := loadbalancing_cpp_static
 LOCAL_SRC_FILES := $(PHOTON_DIR)/libs/libloadbalancing.a
 include $(PREBUILT_STATIC_LIBRARY)
 
+include $(CLEAR_VARS)
+LOCAL_MODULE := egcrypto_static
+LOCAL_SRC_FILES := $(PHOTON_DIR)/libs/libegcrypto.a
+include $(PREBUILT_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := egssl_static
+LOCAL_SRC_FILES := $(PHOTON_DIR)/libs/libegssl.a
+include $(PREBUILT_STATIC_LIBRARY)
+
 # --- Modul Utama Game ---
 include $(CLEAR_VARS)
 
@@ -70,6 +80,8 @@ LOCAL_WHOLE_STATIC_LIBRARIES += cocos_curl_static
 LOCAL_STATIC_LIBRARIES += loadbalancing_cpp_static
 LOCAL_STATIC_LIBRARIES += photon_cpp_static
 LOCAL_STATIC_LIBRARIES += common_cpp_static
+LOCAL_STATIC_LIBRARIES += egssl_static
+LOCAL_STATIC_LIBRARIES += egcrypto_static
 
 include $(BUILD_SHARED_LIBRARY)
 
