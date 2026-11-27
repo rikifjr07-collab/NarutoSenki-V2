@@ -10,7 +10,7 @@ android {
         applicationId "net.zakume.game"
         minSdkVersion 21
         //noinspection ExpiredTargetSdkVersion
-        targetSdkVersion 31
+        targetSdkVersion 22
         versionCode 2
         versionName "2.1"
 
