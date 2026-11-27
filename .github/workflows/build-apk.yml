@@ -164,9 +164,10 @@ jobs:
             curl -fSL "https://${OSSL_HOST}/${OSSL_PATH}" -o openssl.tar.gz
             tar xzf openssl.tar.gz
             cd openssl-1.1.1w
-            ./Configure android-arm64 -D__ANDROID_API__=21 no-shared no-tests
+            ./Configure android-arm64 -D__ANDROID_API__=21 no-shared no-tests --prefix=/tmp/ossl_install
             make -j$(nproc) build_libs
-            cp -f libcrypto.a libssl.a "$CURL_ARM64/"
+            make install_dev
+            cp -f /tmp/ossl_install/lib/libcrypto.a /tmp/ossl_install/lib/libssl.a "$CURL_ARM64/"
             
             # 2. Unduh & kompilasi libcurl 7.88.1
             cd /tmp
@@ -178,7 +179,7 @@ jobs:
             ./configure --host=aarch64-linux-android \
               CC=aarch64-linux-android21-clang \
               AR=llvm-ar RANLIB=llvm-ranlib \
-              --with-openssl=/tmp/openssl-1.1.1w \
+              --with-openssl=/tmp/ossl_install \
               --disable-shared --enable-static \
               --disable-ldap --disable-ldaps --without-zlib --without-brotli --without-zstd \
               CFLAGS="-fPIC"
