@@ -53,13 +53,22 @@ jobs:
             fi
           done
           
-          # Salin file .a release untuk Android arm64-v8a
+          echo "=== Semua file .a di arm64-v8a ==="
+          find /tmp/photon_raw -path "*android/arm64-v8a*" -name "*.a"
+          
+          # Salin 3 library utama Photon
           cp $(find /tmp/photon_raw -path "*android/arm64-v8a*" -iname "*Common-cpp*release*.a" | head -n 1) "$PHOTON_DIR/libs/libcommon.a"
           cp $(find /tmp/photon_raw -path "*android/arm64-v8a*" -iname "*Photon-cpp*release*.a" | head -n 1) "$PHOTON_DIR/libs/libphoton.a"
           cp $(find /tmp/photon_raw -path "*android/arm64-v8a*" -iname "*LoadBalancing-cpp*release*.a" | head -n 1) "$PHOTON_DIR/libs/libloadbalancing.a"
           
-          echo "=== Hasil akhir external/photon ==="
-          ls -la "$PHOTON_DIR/inc" "$PHOTON_DIR/libs"
+          # Salin libcrypto/libssl bawaan Photon jika ada (untuk eg_ERR_print_errors_fp)
+          CRYPTO_A=$(find /tmp/photon_raw -path "*android/arm64-v8a*" -iname "*crypto*.a" | head -n 1)
+          SSL_A=$(find /tmp/photon_raw -path "*android/arm64-v8a*" -iname "*ssl*.a" | head -n 1)
+          [ -n "$CRYPTO_A" ] && cp "$CRYPTO_A" "$PHOTON_DIR/libs/libegcrypto.a" || ar crs "$PHOTON_DIR/libs/libegcrypto.a"
+          [ -n "$SSL_A" ] && cp "$SSL_A" "$PHOTON_DIR/libs/libegssl.a" || ar crs "$PHOTON_DIR/libs/libegssl.a"
+          
+          echo "=== Hasil akhir external/photon/libs ==="
+          ls -la "$PHOTON_DIR/libs"
           rm -rf /tmp/photon_raw
 
       - name: Setup Java JDK 8 (Untuk Gradle)
