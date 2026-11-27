@@ -17,6 +17,10 @@ jobs:
           rm -rf /home/runner/work/_temp/*
           mkdir -p /home/runner/work/_temp
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk/* /opt/ghc /usr/local/share/boost || true
+          
+          # Hapus Android SDK Platforms > 31 agar Gradle lawas tidak error membaca api-level 36
+          sudo rm -rf $ANDROID_HOME/platforms/android-3[2-9] $ANDROID_HOME/platforms/android-4* || true
+          
           sudo apt-get clean
           df -h
 
@@ -28,7 +32,7 @@ jobs:
       - name: Install Android NDK r23b
         run: |
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;23.1.7779620"
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;23.1.7779620" "platforms;android-31" "build-tools;31.0.0"
           # Buat folder platforms kosong agar Gradle versi lama tidak menolak NDK r23b
           mkdir -p "$ANDROID_HOME/ndk/23.1.7779620/platforms"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/23.1.7779620" >> $GITHUB_ENV
