@@ -38,12 +38,33 @@ jobs:
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;23.1.7779620" "platforms;android-31" "build-tools;31.0.0"
           
-          # Hapus tag <base-extension> di semua package.xml agar Gradle 5.x tidak error parsing
-          find "$ANDROID_HOME" -name "package.xml" -exec sed -i '/<base-extension>/,/<\/base-extension>/d' {} +
+          # 1. Hapus tag <base-extension> secara aman menggunakan Python agar XML tidak rusak
+          python3 -c '
+          import glob, re
+          for path in glob.glob("'"$ANDROID_HOME"'/**/package.xml", recursive=True):
+              with open(path, "r", encoding="utf-8") as f:
+                  content = f.read()
+              cleaned = re.sub(r"<base-extension>.*?</base-extension>", "", content, flags=re.DOTALL)
+              if cleaned != content:
+                  with open(path, "w", encoding="utf-8") as f:
+                      f.write(cleaned)
+          '
           
-          # Buat folder platforms & toolchains dummy agar AGP lama tidak menolak NDK r23b
+          # 2. Lengkapi struktur folder platforms, meta, dan toolchains dummy agar AGP lama mengenali arm64-v8a di NDK r23b
           NDK_DIR="$ANDROID_HOME/ndk/23.1.7779620"
-          mkdir -p "$NDK_DIR/platforms"
+          mkdir -p "$NDK_DIR/platforms/android-21/arch-arm64/usr/include"
+          mkdir -p "$NDK_DIR/platforms/android-21/arch-arm/usr/include"
+          mkdir -p "$NDK_DIR/meta"
+          
+          cat << 'EOF' > "$NDK_DIR/meta/abis.json"
+          {
+            "armeabi-v7a": { "bitness": 32, "default": true, "deprecated": false },
+            "arm64-v8a": { "bitness": 64, "default": true, "deprecated": false },
+            "x86": { "bitness": 32, "default": true, "deprecated": false },
+            "x86_64": { "bitness": 64, "default": true, "deprecated": false }
+          }
+          EOF
+          
           for prefix in arm-linux-androideabi aarch64-linux-android x86 x86_64; do
             mkdir -p "$NDK_DIR/toolchains/${prefix}-4.9/prebuilt/linux-x86_64/bin"
           done
@@ -51,7 +72,6 @@ jobs:
           echo "ANDROID_NDK_HOME=$NDK_DIR" >> $GITHUB_ENV
           echo "NDK_ROOT=$NDK_DIR" >> $GITHUB_ENV
 
-          
       - name: Download & Setup Photon C++ SDK v6.0.2
         env:
           GH_TOKEN: ${{ github.token }}
