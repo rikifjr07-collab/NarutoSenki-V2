@@ -37,11 +37,15 @@ jobs:
         run: |
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;23.1.7779620" "platforms;android-31" "build-tools;31.0.0"
+          
+          # Hapus tag <base-extension> di semua package.xml agar Gradle 5.x tidak error parsing
+          find "$ANDROID_HOME" -name "package.xml" -exec sed -i '/<base-extension>/,/<\/base-extension>/d' {} +
+          
           # Buat folder platforms kosong agar Gradle versi lama tidak menolak NDK r23b
           mkdir -p "$ANDROID_HOME/ndk/23.1.7779620/platforms"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/23.1.7779620" >> $GITHUB_ENV
           echo "NDK_ROOT=$ANDROID_HOME/ndk/23.1.7779620" >> $GITHUB_ENV
-
+          
       - name: Download & Setup Photon C++ SDK v6.0.2
         env:
           GH_TOKEN: ${{ github.token }}
