@@ -1,7 +1,7 @@
 APP_STL := c++_shared
 APP_ABI := arm64-v8a
 
-APP_CPPFLAGS := -std=c++2a -frtti -fsigned-char -fexceptions -D_EG_ANDROID_PLATFORM -mno-outline-atomics
+APP_CPPFLAGS := -std=c++2a -frtti -fsigned-char -fexceptions -D_EG_ANDROID_PLATFORM
 APP_LDFLAGS := -latomic -llog -landroid
 
 APP_SHORT_COMMANDS := true
