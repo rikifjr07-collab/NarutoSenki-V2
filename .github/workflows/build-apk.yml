@@ -151,6 +151,9 @@ jobs:
           CURL_ARM64="$GITHUB_WORKSPACE/cocos2dx/platform/third_party/android/prebuilt/libcurl/libs/arm64-v8a"
           if [ -d "$CURL_ARM64" ]; then
             echo "Mengganti libcurl & OpenSSL lama dengan versi PIC modern..."
+            # Hapus sementara folder dummy platforms agar OpenSSL memakai sysroot NDK asli
+            rm -rf "$ANDROID_NDK_HOME/platforms"
+            
             export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
             export PATH="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
             
@@ -182,6 +185,9 @@ jobs:
             make -j$(nproc) -C lib
             cp -f lib/.libs/libcurl.a "$CURL_ARM64/libcurl.a"
             
+            # Buat kembali folder dummy platforms untuk AGP Gradle lama
+            mkdir -p "$ANDROID_NDK_HOME/platforms/android-21/arch-arm64/usr/include"
+            mkdir -p "$ANDROID_NDK_HOME/platforms/android-21/arch-arm/usr/include"
             cd "$PROJ_DIR"
           fi
 
