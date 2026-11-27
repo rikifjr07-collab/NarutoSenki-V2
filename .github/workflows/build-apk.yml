@@ -65,8 +65,12 @@ jobs:
           }
           EOF
           
+          LLVM_BIN="$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin"
           for prefix in arm-linux-androideabi aarch64-linux-android x86 x86_64; do
-            mkdir -p "$NDK_DIR/toolchains/${prefix}-4.9/prebuilt/linux-x86_64/bin"
+            BIN_DIR="$NDK_DIR/toolchains/${prefix}-4.9/prebuilt/linux-x86_64/bin"
+            mkdir -p "$BIN_DIR"
+            ln -sf "$LLVM_BIN/llvm-strip" "$BIN_DIR/${prefix}-strip"
+            ln -sf "$LLVM_BIN/llvm-objcopy" "$BIN_DIR/${prefix}-objcopy"
           done
           
           echo "ANDROID_NDK_HOME=$NDK_DIR" >> $GITHUB_ENV
