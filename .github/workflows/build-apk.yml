@@ -147,38 +147,41 @@ jobs:
           fi
           find "$GITHUB_WORKSPACE" -name "Android.mk" -exec sed -i "s|LOCAL_C_INCLUDES :=|LOCAL_C_INCLUDES := $GITHUB_WORKSPACE/external/photon/inc|g" {} +
           
-          # Unduh & pasang libcurl + OpenSSL (libcrypto & libssl) standar arm64-v8a yang sudah -fPIC
+          # Kompilasi OpenSSL 1.1.1w & libcurl 7.88.1 standar arm64-v8a (-fPIC)
           CURL_ARM64="$GITHUB_WORKSPACE/cocos2dx/platform/third_party/android/prebuilt/libcurl/libs/arm64-v8a"
           if [ -d "$CURL_ARM64" ]; then
             echo "Mengganti libcurl & OpenSSL lama dengan versi PIC modern..."
-            mkdir -p /tmp/curl_prebuilt
-            cd /tmp/curl_prebuilt
-            git clone --depth 1 https://github.com . || true
+            export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
+            export PATH="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
             
-            # Jika repo tidak tersedia, kompilasi cepat OpenSSL 1.1.1w + libcurl minimal untuk arm64-v8a
-            if [ ! -f "arm64-v8a/libcrypto.a" ]; then
-              cd /tmp
-              curl -sL https://openssl.org | tar xz
-              cd openssl-1.1.1w
-              export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
-              PATH="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
-              ./Configure android-arm64 -D__ANDROID_API__=21 no-shared no-tests
-              make -j$(nproc) build_libs
-              cp -f libcrypto.a libssl.a "$CURL_ARM64/"
-              
-              cd /tmp
-              curl -sL https://curl.se | tar xz
-              cd curl-7.88.1
-              ./configure --host=aarch64-linux-android \
-                CC=aarch64-linux-android21-clang \
-                AR=llvm-ar RANLIB=llvm-ranlib \
-                --with-openssl=/tmp/openssl-1.1.1w \
-                --disable-shared --enable-static \
-                --disable-ldap --disable-ldaps --without-zlib --without-brotli --without-zstd \
-                CFLAGS="-fPIC"
-              make -j$(nproc) -C lib
-              cp -f lib/.libs/libcurl.a "$CURL_ARM64/libcurl.a"
-            fi
+            # 1. Unduh & kompilasi OpenSSL 1.1.1w
+            cd /tmp
+            OSSL_HOST="www.openssl.org"
+            OSSL_PATH="source/openssl-1.1.1w.tar.gz"
+            curl -fSL "https://${OSSL_HOST}/${OSSL_PATH}" -o openssl.tar.gz
+            tar xzf openssl.tar.gz
+            cd openssl-1.1.1w
+            ./Configure android-arm64 -D__ANDROID_API__=21 no-shared no-tests
+            make -j$(nproc) build_libs
+            cp -f libcrypto.a libssl.a "$CURL_ARM64/"
+            
+            # 2. Unduh & kompilasi libcurl 7.88.1
+            cd /tmp
+            CURL_HOST="curl.se"
+            CURL_PATH="download/curl-7.88.1.tar.gz"
+            curl -fSL "https://${CURL_HOST}/${CURL_PATH}" -o curl.tar.gz
+            tar xzf curl.tar.gz
+            cd curl-7.88.1
+            ./configure --host=aarch64-linux-android \
+              CC=aarch64-linux-android21-clang \
+              AR=llvm-ar RANLIB=llvm-ranlib \
+              --with-openssl=/tmp/openssl-1.1.1w \
+              --disable-shared --enable-static \
+              --disable-ldap --disable-ldaps --without-zlib --without-brotli --without-zstd \
+              CFLAGS="-fPIC"
+            make -j$(nproc) -C lib
+            cp -f lib/.libs/libcurl.a "$CURL_ARM64/libcurl.a"
+            
             cd "$PROJ_DIR"
           fi
 
