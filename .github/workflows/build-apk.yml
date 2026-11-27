@@ -116,14 +116,26 @@ jobs:
           java-version: '8'
 
       - name: Fix Header Path fmt & Build APK
-        working-directory: projects/NarutoSenki/proj.android-studio
         run: |
+          # Pastikan submodule terunduh jika belum
+          git submodule update --init --recursive || true
+          
+          # Cari lokasi folder proj.android-studio secara otomatis
+          PROJ_DIR=$(find "$GITHUB_WORKSPACE" -type d -name "proj.android-studio" | head -n 1)
+          if [ -z "$PROJ_DIR" ]; then
+            echo "ERROR: Folder proj.android-studio tidak ditemukan! Isi direktori saat ini:"
+            ls -la "$GITHUB_WORKSPACE"
+            exit 1
+          fi
+          
+          echo "Masuk ke direktori proyek: $PROJ_DIR"
+          cd "$PROJ_DIR"
+          
           # Cari lokasi folder induk dari fmt/core.h di dalam repo
           FMT_CORE=$(find "$GITHUB_WORKSPACE" -path "*/fmt/core.h" | head -n 1)
           if [ -n "$FMT_CORE" ]; then
             FMT_INC=$(dirname $(dirname "$FMT_CORE"))
             echo "Ditemukan folder include fmt di: $FMT_INC"
-            # Tambahkan path fmt ke Android.mk milik Lua dan proyek utama
             find "$GITHUB_WORKSPACE" -name "Android.mk" -exec sed -i "s|LOCAL_C_INCLUDES :=|LOCAL_C_INCLUDES := $FMT_INC|g" {} +
           else
             echo "PERINGATAN: fmt/core.h tidak ditemukan di repo, mengunduh fmt..."
@@ -137,7 +149,7 @@ jobs:
           echo "PROP_APP_ABI=arm64-v8a" >> gradle.properties
           chmod +x gradlew
           ./gradlew assembleRelease -PPROP_APP_ABI=arm64-v8a --stacktrace
-
+          
           # Membuat keystore sementara & menandatangani APK
           keytool -genkey -v -keystore release.keystore -alias naruto -keyalg RSA -keysize 2048 -validity 10000 -storepass 123456 -keypass 123456 -dname "CN=NarutoSenki, OU=Dev, O=Game, L=ID, ST=ID, C=ID"
           
@@ -145,7 +157,7 @@ jobs:
           APK_UNSIGNED=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
           
           $BUILD_TOOLS/zipalign -v -p 4 "$APK_UNSIGNED" aligned.apk
-          $BUILD_TOOLS/apksigner sign --ks release.keystore --ks-pass pass:123456 --key-pass pass:123456 --out NarutoSenki-V2-Release.apk aligned.apk
+          $BUILD_TOOLS/apksigner sign --ks release.keystore --ks-pass pass:123456 --key-pass pass:123456 --out "$GITHUB_WORKSPACE/NarutoSenki-V2-Release.apk" aligned.apk
 
       - name: Publish to GitHub Release
         uses: softprops/action-gh-release@v2
