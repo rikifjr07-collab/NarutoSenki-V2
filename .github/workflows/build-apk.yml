@@ -28,6 +28,50 @@ jobs:
           sudo apt-get clean
           df -h
 
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Android NDK r23b
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;23.1.7779620" "platforms;android-31" "build-tools;31.0.0"
+          
+          # Hapus tag <base-extension> secara aman menggunakan Python agar XML tidak rusak
+          python3 -c '
+          import glob, re
+          for path in glob.glob("'"$ANDROID_HOME"'/**/package.xml", recursive=True):
+              with open(path, "r", encoding="utf-8") as f:
+                  content = f.read()
+              cleaned = re.sub(r"<base-extension>.*?</base-extension>", "", content, flags=re.DOTALL)
+              if cleaned != content:
+                  with open(path, "w", encoding="utf-8") as f:
+                      f.write(cleaned)
+          '
+          
+          # Lengkapi struktur folder platforms, meta, dan toolchains dummy agar AGP lama mengenali arm64-v8a di NDK r23b
+          NDK_DIR="$ANDROID_HOME/ndk/23.1.7779620"
+          mkdir -p "$NDK_DIR/platforms/android-21/arch-arm64/usr/include"
+          mkdir -p "$NDK_DIR/platforms/android-21/arch-arm/usr/include"
+          mkdir -p "$NDK_DIR/meta"
+          
+          cat << 'EOF' > "$NDK_DIR/meta/abis.json"
+          {
+            "armeabi-v7a": { "bitness": 32, "default": true, "deprecated": false },
+            "arm64-v8a": { "bitness": 64, "default": true, "deprecated": false },
+            "x86": { "bitness": 32, "default": true, "deprecated": false },
+            "x86_64": { "bitness": 64, "default": true, "deprecated": false }
+          }
+          EOF
+          
+          for prefix in arm-linux-androideabi aarch64-linux-android x86 x86_64; do
+            mkdir -p "$NDK_DIR/toolchains/${prefix}-4.9/prebuilt/linux-x86_64/bin"
+          done
+          
+          echo "ANDROID_NDK_HOME=$NDK_DIR" >> $GITHUB_ENV
+          echo "NDK_ROOT=$NDK_DIR" >> $GITHUB_ENV
+
       - name: Download & Setup Photon C++ SDK v6.0.2
         env:
           GH_TOKEN: ${{ github.token }}
@@ -70,45 +114,6 @@ jobs:
           ls -la "$PHOTON_DIR/libs"
           rm -rf /tmp/photon_raw
 
-      - name: Download & Setup Photon C++ SDK v6.0.2
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          PHOTON_DIR="$GITHUB_WORKSPACE/external/photon"
-          mkdir -p "$PHOTON_DIR/inc" "$PHOTON_DIR/libs" /tmp/photon_raw
-          cd /tmp/photon_raw
-          
-          gh release download photon-sdk -R "${{ github.repository }}" -p "*.7z"
-          for f in *.7z; do
-            7z x "$f" -y
-          done
-          
-          # Salin folder header (Common-cpp, Photon-cpp, LoadBalancing-cpp)
-          for mod in Common-cpp Photon-cpp LoadBalancing-cpp; do
-            FOUND_DIR=$(find /tmp/photon_raw -type d -iname "$mod" | head -n 1)
-            if [ -n "$FOUND_DIR" ]; then
-              cp -r "$FOUND_DIR" "$PHOTON_DIR/inc/"
-            fi
-          done
-          
-          echo "=== Semua file .a di arm64-v8a ==="
-          find /tmp/photon_raw -path "*android/arm64-v8a*" -name "*.a"
-          
-          # Salin 3 library utama Photon
-          cp $(find /tmp/photon_raw -path "*android/arm64-v8a*" -iname "*Common-cpp*release*.a" | head -n 1) "$PHOTON_DIR/libs/libcommon.a"
-          cp $(find /tmp/photon_raw -path "*android/arm64-v8a*" -iname "*Photon-cpp*release*.a" | head -n 1) "$PHOTON_DIR/libs/libphoton.a"
-          cp $(find /tmp/photon_raw -path "*android/arm64-v8a*" -iname "*LoadBalancing-cpp*release*.a" | head -n 1) "$PHOTON_DIR/libs/libloadbalancing.a"
-          
-          # Salin libcrypto/libssl bawaan Photon jika ada (untuk eg_ERR_print_errors_fp)
-          CRYPTO_A=$(find /tmp/photon_raw -path "*android/arm64-v8a*" -iname "*crypto*.a" | head -n 1)
-          SSL_A=$(find /tmp/photon_raw -path "*android/arm64-v8a*" -iname "*ssl*.a" | head -n 1)
-          [ -n "$CRYPTO_A" ] && cp "$CRYPTO_A" "$PHOTON_DIR/libs/libegcrypto.a" || ar crs "$PHOTON_DIR/libs/libegcrypto.a"
-          [ -n "$SSL_A" ] && cp "$SSL_A" "$PHOTON_DIR/libs/libegssl.a" || ar crs "$PHOTON_DIR/libs/libegssl.a"
-          
-          echo "=== Hasil akhir external/photon/libs ==="
-          ls -la "$PHOTON_DIR/libs"
-          rm -rf /tmp/photon_raw
-
       - name: Setup Java JDK 8 (Untuk Gradle)
         uses: actions/setup-java@v4
         with:
@@ -117,9 +122,6 @@ jobs:
 
       - name: Fix Header Path fmt & Build APK
         run: |
-          # Pastikan submodule terunduh jika belum
-          git submodule update --init --recursive || true
-          
           # Cari lokasi folder proj.android-studio secara otomatis
           PROJ_DIR=$(find "$GITHUB_WORKSPACE" -type d -name "proj.android-studio" | head -n 1)
           if [ -z "$PROJ_DIR" ]; then
@@ -164,7 +166,7 @@ jobs:
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: Naruto Senki V2 Build #${{ github.run_number }}
-          files: projects/NarutoSenki/proj.android-studio/NarutoSenki-V2-Release.apk
+          files: NarutoSenki-V2-Release.apk
 
       - name: Pembersih Otomatis Setelah Build
         if: always()
