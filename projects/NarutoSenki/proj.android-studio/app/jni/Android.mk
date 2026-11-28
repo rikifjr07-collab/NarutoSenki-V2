@@ -89,8 +89,6 @@ LOCAL_STATIC_LIBRARIES += websockets_static
 LOCAL_STATIC_LIBRARIES += egssl_static
 LOCAL_STATIC_LIBRARIES += egcrypto_static
 
-LOCAL_LDFLAGS += -Wl,-z,notext
-
 include $(BUILD_SHARED_LIBRARY)
 
 $(call import-module,cocos2dx)
