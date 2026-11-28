@@ -10,9 +10,10 @@
 
 struct NetSlotData
 {
-	int ownerId = 0;      // 0 = Bot (COM), 1 = Host (1P), 2..6 = Client (2P..6P)
-	int group = 0;        // 0 = Konoha (Tim Kiri), 1 = Akatsuki (Tim Kanan)
-	string heroName = ""; // Kosong jika belum dipilih
+	int ownerId = 0;       // 0 = Bot (COM), 1 = Host (1P), 2..6 = Client (2P..6P)
+	int group = 0;         // 0 = Konoha (Tim Kiri), 1 = Akatsuki (Tim Kanan)
+	string heroName = "";  // Kosong jika belum dipilih
+	string playerName = ""; // Username pemain
 };
 
 struct NetPlayerInput
@@ -83,6 +84,18 @@ public:
 	string getStatusText();
 	string getRoomCode() const { return _roomCode; }
 
+	// Multi-Server / Lobby & Online Count (X/20)
+	void selectServer(int index);
+	int getSelectedServer() const { return _selectedServer; }
+	int getServerOnlineCount() const { return _onlineCount; }
+	void probeServerStats();
+
+	// Username & Chat
+	void setMyUsername(const string &name);
+	string getMyUsername();
+	void sendChatMessage(const string &msg);
+	vector<string> popChatMessages();
+
 	bool startHost();
 	bool joinHost(const string &roomCodeOrIp);
 	void disconnect();
@@ -146,6 +159,7 @@ private:
     void leaveRoomReturn(int errorCode, const ExitGames::Common::JString& errorString) override {}
     void joinLobbyReturn() override {}
     void leaveLobbyReturn() override {}
+    void onAppStatsUpdate(int peerCount, int masterPeerCount, int roomCount) override;
 
     struct OutgoingPkt {
         string data;
@@ -162,10 +176,16 @@ private:
 
 	std::atomic<bool> _isHost{false};
 	std::atomic<bool> _isClient{false};
+	std::atomic<bool> _isProbingStats{false};
 	std::atomic<bool> _running{false};
 	std::atomic<bool> _gameStarted{false};
     std::atomic<int> _winnerGroup{-1};
     std::atomic<int> _pingMs{0};
+    std::atomic<int> _selectedServer{0};
+    std::atomic<int> _onlineCount{0};
+
+    string _myUsername = "Ninja";
+    vector<string> _chatQueue;
 
     int _konohaKills = 0;
     int _akatsukiKills = 0;
