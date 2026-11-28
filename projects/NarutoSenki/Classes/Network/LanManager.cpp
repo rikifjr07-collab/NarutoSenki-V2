@@ -11,8 +11,11 @@ using namespace ExitGames::LoadBalancing;
 using namespace ExitGames::Common;
 using namespace ExitGames::Photon;
 
-// GANTI DENGAN APP ID LENGKAP DARI DASHBOARD PHOTON KAMU
-static const JString PHOTON_APP_ID = L"f79e9a91-e345-405e-ab50-c8b202988568";
+static const std::vector<JString> SERVER_APP_IDS = {
+	L"f79e9a91-e345-405e-ab50-c8b202988568", // Lobby 1
+	L"f79e9a91-e345-405e-ab50-c8b202988568", // Lobby 2 (Ganti dengan App ID ke-2)
+	L"f79e9a91-e345-405e-ab50-c8b202988568"  // Lobby 3 (Ganti dengan App ID ke-3)
+};
 static const JString PHOTON_APP_VER = L"1.0";
 
 static LanManager *s_lanInstance = nullptr;
@@ -27,11 +30,13 @@ LanManager *LanManager::getInstance()
 LanManager::LanManager()
 {
 	srand((unsigned int)time(nullptr));
+	_myUsername = format("Ninja{}", 100 + (rand() % 900));
 	for (int i = 0; i < 6; i++)
 	{
 		_slots[i].ownerId = 0;
 		_slots[i].group = (i < 3) ? 0 : 1;
 		_slots[i].heroName = "";
+		_slots[i].playerName = "";
 	}
 }
 
@@ -44,6 +49,99 @@ string LanManager::getStatusText()
 {
 	std::lock_guard<std::mutex> lock(_dataMutex);
 	return _statusMsg;
+}
+
+void LanManager::setMyUsername(const string &name)
+{
+	string clean = name;
+	for (char &c : clean)
+	{
+		if (c == '|' || c == ',' || c == ';') c = ' ';
+	}
+	if (clean.empty()) clean = "Ninja";
+	if (clean.size() > 12) clean = clean.substr(0, 12);
+
+	std::lock_guard<std::mutex> lock(_dataMutex);
+	_myUsername = clean;
+	if (_isHost || _isClient)
+	{
+		for (int i = 0; i < 6; i++)
+		{
+			if (_slots[i].ownerId == _myPlayerId)
+			{
+				_slots[i].playerName = _myUsername;
+				break;
+			}
+		}
+	}
+	if (_isHost)
+	{
+		broadcastLobbyState();
+	}
+	else if (_isClient && _channelSubscribed)
+	{
+		sendGamePacket(format("NAME:{},{}", _myPlayerId, _myUsername), true);
+	}
+}
+
+string LanManager::getMyUsername()
+{
+	std::lock_guard<std::mutex> lock(_dataMutex);
+	return _myUsername;
+}
+
+void LanManager::selectServer(int index)
+{
+	int total = (int)SERVER_APP_IDS.size();
+	if (total == 0) return;
+	_selectedServer = ((index % total) + total) % total;
+	_onlineCount = 0;
+	if (!_isHost && !_isClient)
+	{
+		probeServerStats();
+	}
+}
+
+void LanManager::probeServerStats()
+{
+	if (_isHost || _isClient) return;
+	disconnect();
+	_isProbingStats = true;
+	_running = true;
+	{
+		std::lock_guard<std::mutex> lock(_dataMutex);
+		_statusMsg = format("Cek Lobby {}...", _selectedServer + 1);
+	}
+	std::thread(&LanManager::networkThreadLoop, this).detach();
+}
+
+void LanManager::sendChatMessage(const string &msg)
+{
+	if (msg.empty()) return;
+	string clean = msg;
+	for (char &c : clean)
+	{
+		if (c == '|' || c == '\n' || c == '\r') c = ' ';
+	}
+	if (clean.size() > 50) clean = clean.substr(0, 50);
+
+	string formatted = getMyUsername() + ": " + clean;
+	{
+		std::lock_guard<std::mutex> lock(_dataMutex);
+		_chatQueue.push_back(formatted);
+	}
+	if (_channelSubscribed)
+	{
+		sendGamePacket("CHAT:" + formatted, true);
+	}
+}
+
+vector<string> LanManager::popChatMessages()
+{
+	std::lock_guard<std::mutex> lock(_dataMutex);
+	auto copy = _chatQueue;
+	_chatQueue.clear();
+	return copy;
 }
 
 NetSlotData LanManager::getSlot(int index)
@@ -70,6 +168,7 @@ void LanManager::disconnect()
 	_running = false;
 	_isHost = false;
 	_isClient = false;
+	_isProbingStats = false;
 	_gameStarted = false;
 	_winnerGroup = -1;
 	_pingMs = 0;
@@ -89,6 +188,7 @@ void LanManager::disconnect()
 		_slots[i].ownerId = 0;
 		_slots[i].group = (i < 3) ? 0 : 1;
 		_slots[i].heroName = "";
+		_slots[i].playerName = "";
 	}
 	_myPlayerId = 1;
 	_statusMsg = "Offline";
@@ -96,6 +196,7 @@ void LanManager::disconnect()
 	_akatsukiKills = 0;
 	_hasNewKillReport = false;
 	_hasNewGuardian = false;
+	_chatQueue.clear();
 }
 
 bool LanManager::startHost()
@@ -112,7 +213,8 @@ bool LanManager::startHost()
 	{
 		std::lock_guard<std::mutex> lock(_dataMutex);
 		_slots[0].ownerId = 1;
-		_statusMsg = "Menghubungkan Server...";
+		_slots[0].playerName = _myUsername;
+		_statusMsg = format("Menghubungkan Lobby {}...", _selectedServer + 1);
 	}
 
 	std::thread(&LanManager::networkThreadLoop, this).detach();
@@ -146,22 +248,22 @@ bool LanManager::joinHost(const string &roomCodeOrIp)
 	std::thread(&LanManager::networkThreadLoop, this).detach();
 	return true;
 }
-
 void LanManager::networkThreadLoop()
 {
-	Client* client = new Client(*this, PHOTON_APP_ID, PHOTON_APP_VER, ConnectionProtocol::UDP);
-	client->setAutoJoinLobby(false);
+	int srvIdx = _selectedServer;
+	if (srvIdx < 0 || srvIdx >= (int)SERVER_APP_IDS.size()) srvIdx = 0;
+
+	Client* client = new Client(*this, SERVER_APP_IDS[srvIdx], PHOTON_APP_VER, ConnectionProtocol::UDP);
+	client->setAutoJoinLobby(true);
 	_photonClient = client;
 
-	// Paksa terhubung ke server Singapura (asia) agar ping rendah (25-45ms)
-	    // Terhubung otomatis ke server region ping terendah (Singapura/Asia)
     if (!client->connect())
-
 	{
 		std::lock_guard<std::mutex> lock(_dataMutex);
 		_statusMsg = "Gagal Init Photon";
 		_isHost = false;
 		_isClient = false;
+		_isProbingStats = false;
 		_photonClient = nullptr;
 		delete client;
 		return;
@@ -206,21 +308,37 @@ void LanManager::sendGamePacket(const string &rawPacket, bool reliable)
 		_sendQueue.pop();
 	_sendQueue.push({tagged, reliable});
 }
-// --- Photon Callbacks ---
+
+void LanManager::onAppStatsUpdate(int peerCount, int masterPeerCount, int roomCount)
+{
+	_onlineCount = masterPeerCount;
+}
 
 void LanManager::connectReturn(int errorCode, const JString& errorString, const JString& region, const JString& cluster)
 {
 	if (errorCode != 0)
 	{
 		std::lock_guard<std::mutex> lock(_dataMutex);
-		_statusMsg = "Err Koneksi: " + std::to_string(errorCode);
+		if (errorCode == 32757)
+			_statusMsg = format("Lobby {} Penuh (20/20)!", _selectedServer + 1);
+		else
+			_statusMsg = "Err Koneksi: " + std::to_string(errorCode);
 		_running = false;
 		_isHost = false;
 		_isClient = false;
+		_isProbingStats = false;
 		return;
 	}
 
 	if (!_photonClient) return;
+
+	if (_isProbingStats)
+	{
+		std::lock_guard<std::mutex> lock(_dataMutex);
+		_statusMsg = format("Lobby {} Siap", _selectedServer + 1);
+		return;
+	}
+
 	JString roomJStr(_roomCode.c_str());
 
 	if (_isHost)
@@ -245,7 +363,8 @@ void LanManager::createRoomReturn(int localPlayerNr, const Hashtable& gameProper
 	{
 		_channelSubscribed = true;
 		std::lock_guard<std::mutex> lock(_dataMutex);
-		_statusMsg = "Room: " + _roomCode + " (1/6)";
+		_statusMsg = format("L{} | Room: {} (1/6)", _selectedServer + 1, _roomCode);
+		_chatQueue.push_back("Sistem: Room " + _roomCode + " dibuat.");
 	}
 	else
 	{
@@ -261,11 +380,13 @@ void LanManager::joinRoomReturn(int localPlayerNr, const Hashtable& gameProperti
 	if (errorCode == 0)
 	{
 		_channelSubscribed = true;
+		string myName;
 		{
 			std::lock_guard<std::mutex> lock(_dataMutex);
 			_statusMsg = "Minta Slot Room " + _roomCode + "...";
+			myName = _myUsername;
 		}
-		sendGamePacket("HELLO:" + _clientTempId, true);
+		sendGamePacket(format("HELLO:{},{}", _clientTempId, myName), true);
 	}
 	else
 	{
@@ -285,6 +406,7 @@ void LanManager::connectionErrorReturn(int errorCode)
 		_running = false;
 		_isHost = false;
 		_isClient = false;
+		_isProbingStats = false;
 	}
 }
 
@@ -303,8 +425,6 @@ void LanManager::customEventAction(int playerNr, nByte eventCode, const Object& 
 	}
 }
 
-// --- Logika Paket Game ---
-
 void LanManager::processGamePacket(const string &taggedPkt)
 {
 	if (taggedPkt.size() < 3) return;
@@ -318,7 +438,11 @@ void LanManager::processGamePacket(const string &taggedPkt)
 	{
 		if (pkt.find("HELLO:") == 0)
 		{
-			string tempId = pkt.substr(6);
+			string body = pkt.substr(6);
+			size_t comma = body.find(',');
+			string tempId = (comma != string::npos) ? body.substr(0, comma) : body;
+			string pName = (comma != string::npos) ? body.substr(comma + 1) : "Player";
+
 			int assignedId = -1;
 			int activeCount = 1;
 			{
@@ -331,20 +455,53 @@ void LanManager::processGamePacket(const string &taggedPkt)
 						{
 							assignedId = _nextPlayerId++;
 							_slots[i].ownerId = assignedId;
+							_slots[i].playerName = pName;
 							break;
 						}
 					}
 				}
 				for (int i = 0; i < 6; i++)
 					if (_slots[i].ownerId > 1) activeCount++;
-				_statusMsg = format("Room: {} ({}/6)", _roomCode, activeCount);
+				_statusMsg = format("L{} | Room: {} ({}/6)", _selectedServer + 1, _roomCode, activeCount);
+				_chatQueue.push_back(pName + " bergabung ke room.");
 			}
 
 			if (assignedId != -1)
 			{
 				sendGamePacket(format("ASSIGN:{},{}", tempId, assignedId), true);
+				sendGamePacket("CHAT:" + pName + " bergabung ke room.", true);
 				broadcastLobbyState();
 			}
+		}
+		else if (pkt.find("NAME:") == 0)
+		{
+			size_t comma = pkt.find(',', 5);
+			if (comma != string::npos)
+			{
+				int playerId = atoi(pkt.substr(5, comma - 5).c_str());
+				string pName = pkt.substr(comma + 1);
+				{
+					std::lock_guard<std::mutex> lock(_dataMutex);
+					for (int i = 0; i < 6; i++)
+					{
+						if (_slots[i].ownerId == playerId)
+						{
+							_slots[i].playerName = pName;
+							break;
+						}
+					}
+				}
+				broadcastLobbyState();
+			}
+		}
+		else if (pkt.find("CHAT:") == 0)
+		{
+			string chatLine = pkt.substr(5);
+			{
+				std::lock_guard<std::mutex> lock(_dataMutex);
+				_chatQueue.push_back(chatLine);
+			}
+			sendGamePacket("CHAT:" + chatLine, true);
 		}
 		else if (pkt.find("MOVE:") == 0)
 		{
@@ -361,8 +518,10 @@ void LanManager::processGamePacket(const string &taggedPkt)
 							{
 								_slots[targetSlot].ownerId = playerId;
 								_slots[targetSlot].heroName = _slots[i].heroName;
+								_slots[targetSlot].playerName = _slots[i].playerName;
 								_slots[i].ownerId = 0;
 								_slots[i].heroName = "";
+								_slots[i].playerName = "";
 								break;
 							}
 						}
@@ -412,7 +571,7 @@ void LanManager::processGamePacket(const string &taggedPkt)
 			}
 		}
 	}
-	else if (_isClient)
+    	else if (_isClient)
 	{
 		if (pkt.find("ASSIGN:") == 0)
 		{
@@ -425,8 +584,18 @@ void LanManager::processGamePacket(const string &taggedPkt)
 				{
 					_myPlayerId = assignedId;
 					std::lock_guard<std::mutex> lock(_dataMutex);
-					_statusMsg = format("Room {} (Slot {}P)", _roomCode, _myPlayerId);
+					_statusMsg = format("L{} | Room {} ({}P)", _selectedServer + 1, _roomCode, _myPlayerId);
 				}
+			}
+		}
+		else if (pkt.find("CHAT:") == 0)
+		{
+			string chatLine = pkt.substr(5);
+			std::lock_guard<std::mutex> lock(_dataMutex);
+			string myPrefix = _myUsername + ": ";
+			if (chatLine.find(myPrefix) != 0)
+			{
+				_chatQueue.push_back(chatLine);
 			}
 		}
 		else if (pkt.find("LOBBY:") == 0) { parseLobbyPacket(pkt.substr(6)); }
@@ -529,6 +698,7 @@ void LanManager::processGamePacket(const string &taggedPkt)
 		}
 	}
 }
+
 void LanManager::broadcastLobbyState()
 {
 	if (!_isHost) return;
@@ -537,7 +707,7 @@ void LanManager::broadcastLobbyState()
 		std::lock_guard<std::mutex> lock(_dataMutex);
 		for (int i = 0; i < 6; i++)
 		{
-			pkt += format("{},{}", _slots[i].ownerId, _slots[i].heroName);
+			pkt += format("{},{},{}", _slots[i].ownerId, _slots[i].heroName, _slots[i].playerName);
 			if (i < 5) pkt += "|";
 		}
 	}
@@ -552,11 +722,20 @@ void LanManager::parseLobbyPacket(const string &packet)
 	int idx = 0;
 	while (std::getline(ss, item, '|') && idx < 6)
 	{
-		size_t comma = item.find(',');
-		if (comma != string::npos)
+		size_t c1 = item.find(',');
+		if (c1 != string::npos)
 		{
-			_slots[idx].ownerId = atoi(item.substr(0, comma).c_str());
-			_slots[idx].heroName = item.substr(comma + 1);
+			_slots[idx].ownerId = atoi(item.substr(0, c1).c_str());
+			size_t c2 = item.find(',', c1 + 1);
+			if (c2 != string::npos)
+			{
+				_slots[idx].heroName = item.substr(c1 + 1, c2 - (c1 + 1));
+				_slots[idx].playerName = item.substr(c2 + 1);
+			}
+			else
+			{
+				_slots[idx].heroName = item.substr(c1 + 1);
+			}
 		}
 		idx++;
 	}
@@ -577,8 +756,10 @@ void LanManager::requestMoveSlot(int targetSlot)
 					{
 						_slots[targetSlot].ownerId = _myPlayerId;
 						_slots[targetSlot].heroName = _slots[i].heroName;
+						_slots[targetSlot].playerName = _slots[i].playerName;
 						_slots[i].ownerId = 0;
 						_slots[i].heroName = "";
+						_slots[i].playerName = "";
 						break;
 					}
 				}
@@ -697,10 +878,7 @@ void LanManager::broadcastGameOver(int winnerGroup)
 	sendGamePacket(format("OVER:{}", winnerGroup), true);
 }
 
-void LanManager::sendPing()
-{
-	// Ping dihitung otomatis oleh Photon UDP di networkThreadLoop
-}
+void LanManager::sendPing() {}
 
 void LanManager::broadcastFlogState(const vector<NetFlogSync> &flogs)
 {
@@ -804,3 +982,4 @@ bool LanManager::popGuardianSpawn(string &guardName, int &group)
 	_hasNewGuardian = false;
 	return true;
 }
+
