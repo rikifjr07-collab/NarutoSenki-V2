@@ -12,7 +12,7 @@ using namespace ExitGames::Common;
 using namespace ExitGames::Photon;
 
 // GANTI DENGAN APP ID LENGKAP DARI DASHBOARD PHOTON KAMU
-static const JString PHOTON_APP_ID = L"MASUKKAN_APP_ID_PHOTON_LENGKAP_DISINI";
+static const JString PHOTON_APP_ID = L"f79e9a91-e345-405e-ab50-c8b202988568";
 static const JString PHOTON_APP_VER = L"1.0";
 
 static LanManager *s_lanInstance = nullptr;
