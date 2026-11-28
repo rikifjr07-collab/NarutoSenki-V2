@@ -514,44 +514,78 @@ function SelectLayer:initMultiplayerUI()
     local width, height = display.width, display.height
     local ud = CCUserDefault:sharedUserDefault()
 
-    self._netStatusLabel = CCLabelTTF:create('Status: Offline (3v3)', 'Arial', 11)
+    self._netStatusLabel = CCLabelTTF:create('Status: Offline (3v3)', 'Arial', 10)
     self._netStatusLabel:setAnchorPoint(CCPoint(0, 0.5))
-    self._netStatusLabel:setPosition(8, height - 42)
+    self._netStatusLabel:setPosition(8, height - 38)
     self:addChild(self._netStatusLabel, 120)
 
-    local hostLabel = CCLabelTTF:create('[ HOST LAN ]', 'Arial', 12)
+    self._lobbyBtnLabel = CCLabelTTF:create('[ Lobby 1: 0/20 ]', 'Arial', 11)
+    self._lobbyBtnLabel:setColor(ccc3(120, 255, 180))
+    local lobbyBtn = CCMenuItemLabel:create(self._lobbyBtnLabel)
+    lobbyBtn:registerScriptTapHandler(function()
+        local curIdx = ud:getIntegerForKey('net_server_idx') or 0
+        ud:setStringForKey('net_cmd', 'SERVER:' .. tostring(curIdx + 1))
+        audio.playSound('Audio/Menu/select.ogg')
+    end)
+
+    local nameBg = CCScale9Sprite:createWithSpriteFrameName('team_bg.png')
+    self._nameEditBox = CCEditBox:create(CCSizeMake(75, 20), nameBg)
+    self._nameEditBox:setFontName('Arial')
+    self._nameEditBox:setFontSize(10)
+    self._nameEditBox:setFontColor(ccc3(255, 255, 120))
+    self._nameEditBox:setPlaceHolder('Nama...')
+    self._nameEditBox:setMaxLength(12)
+    self._nameEditBox:setReturnType(kKeyboardReturnTypeDone)
+    self._nameEditBox:setText(ud:getStringForKey('player_username') or 'Ninja')
+    self._nameEditBox:setPosition(width - 315, height - 18)
+    self._nameEditBox:registerScriptEditBoxHandler(function(eventType)
+        if eventType == 'ended' or eventType == 'return' then
+            local txt = self._nameEditBox:getText()
+            if txt and txt ~= '' then
+                ud:setStringForKey('net_cmd', 'NAME:' .. txt)
+            end
+        end
+    end)
+    self:addChild(self._nameEditBox, 120)
+
+    local hostLabel = CCLabelTTF:create('[ HOST ]', 'Arial', 11)
     local hostBtn = CCMenuItemLabel:create(hostLabel)
     hostBtn:registerScriptTapHandler(function()
+        local txt = self._nameEditBox:getText()
+        if txt and txt ~= '' then ud:setStringForKey('net_cmd', 'NAME:' .. txt) end
         ud:setStringForKey('net_cmd', 'HOST')
         audio.playSound('Audio/Menu/confirm.ogg')
     end)
 
     local editBg = CCScale9Sprite:createWithSpriteFrameName('team_bg.png')
-    self._ipEditBox = CCEditBox:create(CCSizeMake(110, 22), editBg)
+    self._ipEditBox = CCEditBox:create(CCSizeMake(85, 20), editBg)
     self._ipEditBox:setFontName('Arial')
-    self._ipEditBox:setFontSize(11)
+    self._ipEditBox:setFontSize(10)
     self._ipEditBox:setFontColor(ccc3(255, 255, 255))
-    self._ipEditBox:setPlaceHolder('Ketik IP Host...')
+    self._ipEditBox:setPlaceHolder('Kode Room...')
     self._ipEditBox:setPlaceholderFontColor(ccc3(200, 200, 200))
-    self._ipEditBox:setMaxLength(20)
+    self._ipEditBox:setMaxLength(12)
     self._ipEditBox:setReturnType(kKeyboardReturnTypeDone)
-    self._ipEditBox:setPosition(width - 175, height - 18)
+    self._ipEditBox:setPosition(width - 170, height - 18)
     self:addChild(self._ipEditBox, 120)
 
-    local joinLabel = CCLabelTTF:create('[ JOIN ]', 'Arial', 12)
+    local joinLabel = CCLabelTTF:create('[ JOIN ]', 'Arial', 11)
     local joinBtn = CCMenuItemLabel:create(joinLabel)
     joinBtn:registerScriptTapHandler(function()
-        local ip = self._ipEditBox:getText()
-        if ip and ip ~= '' then
-            ud:setStringForKey('net_cmd', 'JOIN:' .. ip)
+        local txt = self._nameEditBox:getText()
+        if txt and txt ~= '' then ud:setStringForKey('net_cmd', 'NAME:' .. txt) end
+        local code = self._ipEditBox:getText()
+        if code and code ~= '' then
+            ud:setStringForKey('net_cmd', 'JOIN:' .. code)
             audio.playSound('Audio/Menu/confirm.ogg')
         end
     end)
 
-    local netMenu = ui.newMenu({hostBtn, joinBtn})
+    local netMenu = ui.newMenu({lobbyBtn, hostBtn, joinBtn})
     netMenu:setPosition(0, 0)
-    hostBtn:setPosition(width - 265, height - 18)
-    joinBtn:setPosition(width - 90, height - 18)
+    lobbyBtn:setPosition(width - 140, height - 38)
+    hostBtn:setPosition(width - 245, height - 18)
+    joinBtn:setPosition(width - 95, height - 18)
     self:addChild(netMenu, 120)
 
     self._mpSlotLayer = display.newLayer()
@@ -592,7 +626,7 @@ function SelectLayer:initMultiplayerUI()
         table.insert(slotMenuItems, slotBtn)
 
         local sideTag = isEnemySide and 'AKA ' or 'KON '
-        local tagLabel = CCLabelTTF:create(sideTag .. 'COM', 'Arial', 9)
+        local tagLabel = CCLabelTTF:create(sideTag .. 'COM', 'Arial', 8)
         tagLabel:setAnchorPoint(CCPoint(0.5, 1))
         tagLabel:setPosition(posX + 16, posY - 1)
         self._mpSlotLayer:addChild(tagLabel, 4)
@@ -602,6 +636,42 @@ function SelectLayer:initMultiplayerUI()
     local slotMenu = ui.newMenu(slotMenuItems)
     slotMenu:setPosition(0, 0)
     self._mpSlotLayer:addChild(slotMenu, 5)
+    local chatBg = CCLayerColor:create(ccc4(0, 0, 0, 175), 145, 58)
+    chatBg:setPosition(6, 64)
+    self._mpSlotLayer:addChild(chatBg, 1)
+
+    self._chatLines = {}
+    self._chatDisplay = CCLabelTTF:create('Chat Room siap...', 'Arial', 8, CCSizeMake(140, 36), kCCTextAlignmentLeft)
+    self._chatDisplay:setAnchorPoint(CCPoint(0, 1))
+    self._chatDisplay:setPosition(9, 120)
+    self._chatDisplay:setColor(ccc3(235, 235, 235))
+    self._mpSlotLayer:addChild(self._chatDisplay, 5)
+
+    local chatInputBg = CCScale9Sprite:createWithSpriteFrameName('team_bg.png')
+    self._chatEditBox = CCEditBox:create(CCSizeMake(106, 18), chatInputBg)
+    self._chatEditBox:setFontName('Arial')
+    self._chatEditBox:setFontSize(9)
+    self._chatEditBox:setFontColor(ccc3(255, 255, 255))
+    self._chatEditBox:setPlaceHolder('Ketik chat...')
+    self._chatEditBox:setMaxLength(50)
+    self._chatEditBox:setReturnType(kKeyboardReturnTypeSend)
+    self._chatEditBox:setPosition(60, 74)
+    self._mpSlotLayer:addChild(self._chatEditBox, 6)
+
+    local sendChatLbl = CCLabelTTF:create('[Kirim]', 'Arial', 9)
+    sendChatLbl:setColor(ccc3(120, 255, 120))
+    local sendChatBtn = CCMenuItemLabel:create(sendChatLbl)
+    sendChatBtn:setPosition(132, 74)
+    sendChatBtn:registerScriptTapHandler(function()
+        local msg = self._chatEditBox:getText()
+        if msg and msg ~= '' then
+            ud:setStringForKey('net_cmd', 'CHAT:' .. msg)
+            self._chatEditBox:setText('')
+        end
+    end)
+    local chatMenu = ui.newMenu({sendChatBtn})
+    chatMenu:setPosition(0, 0)
+    self._mpSlotLayer:addChild(chatMenu, 6)
 
     self:schedule(function()
         self:refreshMultiplayerSlots()
@@ -612,6 +682,12 @@ function SelectLayer:refreshMultiplayerSlots()
     local ud = CCUserDefault:sharedUserDefault()
     local status = ud:getStringForKey('net_status')
     local myId = ud:getIntegerForKey('net_my_id')
+    local srvIdx = ud:getIntegerForKey('net_server_idx') or 0
+    local onlineCnt = ud:getIntegerForKey('net_online_count') or 0
+
+    if self._lobbyBtnLabel then
+        self._lobbyBtnLabel:setString(string.format('[ Lobby %d: %d/20 ]', srvIdx + 1, onlineCnt))
+    end
 
     if self._netStatusLabel then
         if status and status ~= '' then
@@ -630,16 +706,32 @@ function SelectLayer:refreshMultiplayerSlots()
     if self._mpSlotLayer then self._mpSlotLayer:setVisible(true) end
     if self._teamSelector then self._teamSelector:setVisible(false) end
 
+    local newChat = ud:getStringForKey('net_new_chat')
+    if newChat and newChat ~= '' then
+        ud:setStringForKey('net_new_chat', '')
+        for line in string.gmatch(newChat, '[^\n]+') do
+            table.insert(self._chatLines, line)
+            if #self._chatLines > 3 then
+                table.remove(self._chatLines, 1)
+            end
+        end
+        if self._chatDisplay then
+            self._chatDisplay:setString(table.concat(self._chatLines, '\n'))
+        end
+    end
+
     for i = 0, 5 do
         local owner = ud:getIntegerForKey('net_slot_owner_' .. tostring(i)) or 0
         local hero = ud:getStringForKey('net_slot_hero_' .. tostring(i)) or ''
+        local pName = ud:getStringForKey('net_slot_name_' .. tostring(i)) or ''
         local sideTag = (i >= 3) and 'AKA ' or 'KON '
 
         if owner == 0 then
             self._slotTags[i]:setString(sideTag .. 'COM')
             self._slotTags[i]:setColor(ccc3(200, 200, 200))
         else
-            self._slotTags[i]:setString(sideTag .. tostring(owner) .. 'P')
+            local displayName = (pName ~= '') and pName or (tostring(owner) .. 'P')
+            self._slotTags[i]:setString(displayName)
             self._slotTags[i]:setColor(owner == myId and ccc3(100, 255, 100) or ccc3(255, 220, 100))
         end
 
