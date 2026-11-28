@@ -471,7 +471,6 @@ Hero *GameLayer::addHero(const string &name, Role role, Group group, Vec2 spawnP
 	}
 	hero->setPosition(spawnPoint);
 	hero->setSpawnPoint(spawnPoint);
-	// NOTE: Set all characters speed to zero. (Control movement before game real start)
 	hero->setWalkSpeed(0);
 	if (group == Group::Akatsuki)
 	{
@@ -483,6 +482,31 @@ Hero *GameLayer::addHero(const string &name, Role role, Group group, Vec2 spawnP
 	hero->idle();
 	hero->setCharId(charId);
 	hero->schedule(schedule_selector(CharacterBase::setRestore2), 1.0f);
+
+	auto lan = LanManager::getInstance();
+	if (lan->isMultiplayer())
+	{
+		int slotIdx = charId - 1;
+		if (slotIdx >= 0 && slotIdx < 6)
+		{
+			NetSlotData slot = lan->getSlot(slotIdx);
+			if (slot.ownerId > 0 && !slot.playerName.empty() && hero->_hpBar)
+			{
+				auto nameLabel = CCLabelTTF::create(slot.playerName.c_str(), "Arial", 9);
+				nameLabel->setAnchorPoint(Vec2(0.5f, 0.0f));
+				float barW = hero->_hpBar->getHPBottom()->getContentSize().width;
+				float barH = hero->_hpBar->getHPBottom()->getContentSize().height;
+				nameLabel->setPosition(Vec2(barW / 2.0f, barH + 2.0f));
+				if (slot.ownerId == lan->getMyPlayerId())
+					nameLabel->setColor(ccc3(100, 255, 100));
+				else if (group == playerGroup)
+					nameLabel->setColor(ccc3(120, 220, 255));
+				else
+					nameLabel->setColor(ccc3(255, 120, 120));
+				hero->_hpBar->addChild(nameLabel, 10);
+			}
+		}
+	}
 
 	addChild(hero, -hero->getPositionY());
 	_CharacterArray.push_back(hero);
