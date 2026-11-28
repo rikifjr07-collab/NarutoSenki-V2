@@ -10,7 +10,21 @@
 
 SelectLayer::SelectLayer()
 {
-    UserDefault::sharedUserDefault()->setStringForKey("net_cmd", "");
+    auto ud = UserDefault::sharedUserDefault();
+    ud->setStringForKey("net_cmd", "");
+    ud->setStringForKey("net_new_chat", "");
+
+    string savedName = ud->getStringForKey("player_username", "");
+    if (!savedName.empty())
+    {
+        LanManager::getInstance()->setMyUsername(savedName);
+    }
+    else
+    {
+        ud->setStringForKey("player_username", LanManager::getInstance()->getMyUsername());
+    }
+
+    LanManager::getInstance()->probeServerStats();
     schedule(schedule_selector(SelectLayer::updateNetworkLobby), 0.15f);
 }
 
@@ -39,7 +53,6 @@ void SelectLayer::onGameStart()
 	}
 	else if (lan->isClient() && !lan->isGameStartedSignal())
 	{
-		// Client tidak bisa memulai sendiri sebelum Host menekan Start
 		return;
 	}
 
@@ -68,7 +81,6 @@ void SelectLayer::updateNetworkLobby(float dt)
 	auto ud = UserDefault::sharedUserDefault();
 	auto lan = LanManager::getInstance();
 
-	// 1. Baca perintah dari Lua (SelectLayer.lua)
 	string cmd = ud->getStringForKey("net_cmd", "");
 	if (!cmd.empty())
 	{
@@ -89,26 +101,52 @@ void SelectLayer::updateNetworkLobby(float dt)
 		{
 			lan->requestSelectHero(cmd.substr(5));
 		}
+		else if (cmd.find("SERVER:") == 0)
+		{
+			lan->selectServer(atoi(cmd.substr(7).c_str()));
+		}
+		else if (cmd.find("NAME:") == 0)
+		{
+			string newName = cmd.substr(5);
+			lan->setMyUsername(newName);
+			ud->setStringForKey("player_username", lan->getMyUsername());
+		}
+		else if (cmd.find("CHAT:") == 0)
+		{
+			lan->sendChatMessage(cmd.substr(5));
+		}
 		else if (cmd == "DISCONNECT")
 		{
 			lan->disconnect();
+			lan->probeServerStats();
 		}
 	}
 
-	// 2. Tulis status lobby & ke-6 slot ke UserDefault untuk ditampilkan Lua
 	ud->setStringForKey("net_status", lan->getStatusText());
 	ud->setIntegerForKey("net_my_id", lan->isMultiplayer() ? lan->getMyPlayerId() : 0);
+	ud->setIntegerForKey("net_server_idx", lan->getSelectedServer());
+	ud->setIntegerForKey("net_online_count", lan->getServerOnlineCount());
 
 	for (int i = 0; i < 6; i++)
 	{
 		NetSlotData slot = lan->getSlot(i);
-		string keyOwner = format("net_slot_owner_{}", i);
-		string keyHero = format("net_slot_hero_{}", i);
-		ud->setIntegerForKey(keyOwner.c_str(), slot.ownerId);
-		ud->setStringForKey(keyHero.c_str(), slot.heroName);
+		ud->setIntegerForKey(format("net_slot_owner_{}", i).c_str(), slot.ownerId);
+		ud->setStringForKey(format("net_slot_hero_{}", i).c_str(), slot.heroName);
+		ud->setStringForKey(format("net_slot_name_{}", i).c_str(), slot.playerName);
 	}
 
-	// 3. Jika Client menerima sinyal START dari Host, otomatis masuk ke arena
+	auto chats = lan->popChatMessages();
+	if (!chats.empty())
+	{
+		string existing = ud->getStringForKey("net_new_chat", "");
+		for (const auto &c : chats)
+		{
+			if (!existing.empty()) existing += "\n";
+			existing += c;
+		}
+		ud->setStringForKey("net_new_chat", existing);
+	}
+
 	if (lan->isClient() && lan->isGameStartedSignal())
 	{
 		onGameStart();
@@ -126,7 +164,6 @@ void SelectLayer::onEnter()
 {
     Layer::onEnter();
     setKeypadEnabled(true);
-    // schedule sudah dipindah ke constructor SelectLayer()
 }
 
 void SelectLayer::keyBackClicked()
